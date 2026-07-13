@@ -22,7 +22,9 @@ o jogo inteiro.
 
 **Guardiao (Tank)** — fica no alcance corpo-a-corpo do boss e ataca automaticamente,
 gerando MUITO threat (aggro). Recurso: **Ira**.
-- `1` **Provocar** — força o boss a mirar nele (taunt).
+- `1` **Provocar** — força o **boss** a mirar nele (taunt) **e também taunta todos
+  os adds vivos**, que passam a vir pra cima dele por alguns segundos. Enquanto tiver
+  um add taunado ao alcance, o auto-attack prioriza matá-lo antes de voltar pro boss.
 - `2` **Muralha** — reduz o dano recebido por alguns segundos (gasta Ira).
 
 **Clerigo (Healer)** — cura automaticamente mira o aliado com menos vida. Recurso:
@@ -43,7 +45,9 @@ Tem **fases por % de vida** e mecânicas que forçam o uso da trindade:
 - **AoE telegrafado** no chão, mirado num membro aleatório do grupo (qualquer um pode
   ser alvo, inclusive o tank) — saia da área antes de detonar.
 - **Projéteis** (fase 2+) num membro aleatório — desvie andando.
-- **Adds** que perseguem quem estiver mais perto — o Mago troca de alvo para limpá-los.
+- **Adds** que travam num alvo **sorteado aleatoriamente** entre o grupo (não mais
+  "sempre o mais perto") — o Guardiao usa Provocar pra puxá-los pra si, e o Mago
+  troca de alvo (Tab/clique, ou automaticamente se for bot) para limpá-los.
 - **Fase 1** (100–66%): corpo-a-corpo + AoE + adds · **Fase 2** (66–33%): + projéteis ·
   **Fase 3** (33–0%): dois AoEs simultâneos + projéteis mais rápidos.
 
@@ -90,7 +94,7 @@ scripts/
   clerigo.gd            # Healer: Mana, Cura, Cura Rapida, Escudo, Ressurreição
   boss.gd               # threat/aggro, fases, corpo-a-corpo, AoE, projéteis, adds
   projectile.gd         # projétil do boss (fase 2+)
-  add.gd                # inimigo menor que persegue o membro mais próximo
+  add.gd                # inimigo menor: alvo travado sorteado, taunt(), is_targeting()
 ```
 
 Tudo desenhado com formas simples (`_draw`) — arte placeholder por design
@@ -109,6 +113,14 @@ Tudo desenhado com formas simples (`_draw`) — arte placeholder por design
   o próximo ponto de extensão natural para o multiplayer (ver escopo, seção 6).
 - A linha de habilidades pode ficar comprida/apertada com o Clerigo (4 habilidades
   numa linha só) — é só texto de depuração por enquanto, não uma UI final.
+- **Provocar taunta TODOS os adds vivos**, sem checar distância/raio — mais simples
+  de implementar sem poder compilar/testar; se parecer forte demais (ou fraco
+  demais) depois de jogar, dá pra limitar por raio.
+- Mudar os adds de "sempre o mais próximo" pra "alvo aleatório" é uma mudança de
+  dificuldade **intencional**: agora a luta depende de verdade do tank agir. Se um
+  add sortear o Healer/Mago antes do tank conseguir taunar, pode doer — é esperado,
+  mas vale calibrar (cooldown do Provocar, ou um "grace period" inicial) se sentir
+  punitivo demais logo no começo do encontro.
 
 ## Próximos passos sugeridos
 

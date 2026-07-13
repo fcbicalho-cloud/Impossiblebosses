@@ -211,6 +211,15 @@ func _start_rez(t: PartyMember) -> void:
 	_cast_target = t
 
 
+## Prioridades (do mais urgente pro mais preventivo):
+## 1. Rez se alguém morreu e tem carga.
+## 2. Crítico (frac < 0.3): usa o que estiver disponível pra reverter rápido.
+## 3. Moderado (0.3-0.6): Cura Rápida — barata, sem vulnerabilidade de cast.
+## 4. Preventivo (nada urgente, mana > 60%): Escudo em quem o boss está
+##    batendo agora (normalmente o tank), ANTES do dano acontecer — hoje
+##    Escudo só entrava depois que alguém já tava quase morrendo.
+## 5. Sobra: Cura só se frac < 0.7 (reservada, não é mais a ferramenta padrão);
+##    Cura Rápida pra topar quem está só um pouco machucado (0.7-0.85).
 func _bot_decide() -> void:
 	if _cast_kind != "":
 		return
@@ -218,19 +227,45 @@ func _bot_decide() -> void:
 	if dead != null and boss != null and is_instance_valid(boss) and boss.rez_charges > 0 and mana >= REZ_COST:
 		_start_rez(dead)
 		return
+
 	var weakest := _lowest_hp_ally()
 	if weakest == null:
 		return
 	var frac: float = weakest.hp_fraction()
-	if frac < 0.35:
+
+	if frac < 0.3:
 		if _rapida_cd <= 0.0 and mana >= RAPIDA_COST:
 			_use_rapida(weakest)
 		elif _escudo_cd <= 0.0 and mana >= ESCUDO_COST:
 			_use_escudo(weakest)
 		elif mana >= CURA_COST:
 			_start_cura(weakest)
-	elif frac < 0.8 and mana >= CURA_COST:
+		return
+
+	if frac < 0.6:
+		if _rapida_cd <= 0.0 and mana >= RAPIDA_COST:
+			_use_rapida(weakest)
+		elif mana >= CURA_COST:
+			_start_cura(weakest)
+		return
+
+	if mana >= MANA_MAX * 0.6 and _escudo_cd <= 0.0:
+		var tanked := _current_boss_target()
+		if tanked != null and tanked.shield <= 0.0:
+			_use_escudo(tanked)
+			return
+
+	if frac < 0.7 and mana >= CURA_COST:
 		_start_cura(weakest)
+	elif frac < 0.85 and _rapida_cd <= 0.0 and mana >= RAPIDA_COST:
+		_use_rapida(weakest)
+
+
+func _current_boss_target() -> PartyMember:
+	if boss == null or not is_instance_valid(boss) or not boss.has_method("current_target"):
+		return null
+	var t: PartyMember = boss.current_target()
+	return t
 
 
 func _lowest_hp_ally() -> PartyMember:

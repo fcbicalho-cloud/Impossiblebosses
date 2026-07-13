@@ -82,16 +82,38 @@ func _tick_cooldowns(delta: float) -> void:
 
 func _handle_autoattack(delta: float) -> void:
 	_attack_cd = maxf(0.0, _attack_cd - delta)
+	if _attack_cd > 0.0:
+		return
+
+	var taunted_add: Add = _nearby_taunted_add()
+	if taunted_add != null:
+		_attack_cd = ATTACK_INTERVAL
+		taunted_add.take_damage(ATTACK_DAMAGE)
+		ira = minf(IRA_MAX, ira + IRA_PER_HIT)
+		return
+
 	if boss == null or not is_instance_valid(boss):
 		return
 	if position.distance_to(boss.position) > MELEE_RANGE:
 		return
-	if _attack_cd == 0.0:
-		_attack_cd = ATTACK_INTERVAL
-		boss.take_damage(ATTACK_DAMAGE)
-		ira = minf(IRA_MAX, ira + IRA_PER_HIT)
-		if boss.has_method("add_threat"):
-			boss.add_threat(self, ATTACK_DAMAGE * THREAT_MULTIPLIER)
+	_attack_cd = ATTACK_INTERVAL
+	boss.take_damage(ATTACK_DAMAGE)
+	ira = minf(IRA_MAX, ira + IRA_PER_HIT)
+	if boss.has_method("add_threat"):
+		boss.add_threat(self, ATTACK_DAMAGE * THREAT_MULTIPLIER)
+
+
+## Add vivo dentro do alcance corpo-a-corpo que está mirando neste Guardiao
+## (via taunt) — prioridade de ataque sobre o boss, pra "matar quem provocou".
+func _nearby_taunted_add() -> Add:
+	for n: Add in get_tree().get_nodes_in_group("add"):
+		if not is_instance_valid(n):
+			continue
+		if not n.is_targeting(self):
+			continue
+		if position.distance_to(n.position) <= MELEE_RANGE:
+			return n
+	return null
 
 
 ## Usado pelo HUD (main.gd) para desenhar o painel de habilidades: nome,
@@ -133,6 +155,9 @@ func _use_taunt() -> void:
 	_taunt_cd = TAUNT_COOLDOWN
 	if boss != null and is_instance_valid(boss) and boss.has_method("taunt"):
 		boss.taunt(self)
+	for n in get_tree().get_nodes_in_group("add"):
+		if is_instance_valid(n) and n.has_method("taunt"):
+			n.taunt(self)
 
 
 func _use_muralha() -> void:
