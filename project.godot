@@ -1,0 +1,21 @@
+; Engine configuration file.
+; Impossible Bosses (top-down) — protótipo M1 de boss.
+; Formato do Godot 4.x. Abra a pasta no Godot 4.3+ e rode (F5).
+
+config_version=5
+
+[application]
+
+config/name="Impossible Bosses - Prototipo"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.3")
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=640
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
