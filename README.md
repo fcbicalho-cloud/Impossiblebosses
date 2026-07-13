@@ -13,8 +13,12 @@ O que já dá para sentir:
 - Movimento top-down (WASD).
 - Combate **tab-target**: o alvo fica travado e o **auto-attack** dispara sozinho
   quando o boss está no alcance.
-- Um **boss** com barra de vida e uma mecânica telegrafada: um **AoE no chão**
-  (círculo vermelho) que avisa antes de detonar — você precisa **sair da área**.
+- Um **boss com fases** e duas mecânicas:
+  - **AoE no chão** (círculo vermelho telegrafado) — saia da área antes de detonar.
+  - **Projéteis** (a partir da fase 2) disparados na sua direção — desvie andando.
+  - **Fase 1** (100–66%): só AoE · **Fase 2** (66–33%): AoE mais rápido + projéteis ·
+    **Fase 3** (33–0%): dois AoEs ao mesmo tempo + projéteis mais rápidos.
+  - Aviso de **"FASE X!"** e o boss muda de cor a cada virada.
 - Vitória (matar o boss), derrota (morrer) e reinício rápido.
 
 ## Como rodar
@@ -40,9 +44,10 @@ Não há dependências externas nem passos de build.
 project.godot      # configuração do projeto (Godot 4.x)
 Main.tscn          # cena principal
 scripts/
-  main.gd          # arena, HUD e estado de jogo (vitória/derrota/restart)
+  main.gd          # arena, HUD, projéteis e estado de jogo (vitória/derrota/restart)
   player.gd        # Mago: movimento + auto-attack no alvo
-  boss.gd          # boss + AoE telegrafado
+  boss.gd          # boss: fases + AoE telegrafado + disparo de projéteis
+  projectile.gd    # projétil do boss (fase 2+)
 ```
 
 Tudo desenhado com formas simples (`_draw`) — arte placeholder por design
