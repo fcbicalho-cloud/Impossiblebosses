@@ -11,12 +11,17 @@ do combate na ótica do DPS ("Mago"), **sem** trindade, threat, cura ou bots ain
 
 O que já dá para sentir:
 - Movimento top-down (WASD).
-- Combate **tab-target**: o alvo fica travado e o **auto-attack** dispara sozinho
-  quando o boss está no alcance.
-- Um **boss com fases** e duas mecânicas:
+- Modelo de dano com **tensão de posicionamento**:
+  - **Auto-attack** fraco, dispara sozinho no alvo em alcance (funciona andando).
+  - **Conjuração** = o dano principal, mas **só progride PARADO** — mover interrompe
+    e zera o progresso. É o "parar pra causar dano te expõe às mecânicas".
+- **Tab-target**: selecione o alvo com **Tab** (cicla) ou **clicando** no inimigo.
+- Um **boss com fases** e três mecânicas:
   - **AoE no chão** (círculo vermelho telegrafado) — saia da área antes de detonar.
   - **Projéteis** (a partir da fase 2) disparados na sua direção — desvie andando.
-  - **Fase 1** (100–66%): só AoE · **Fase 2** (66–33%): AoE mais rápido + projéteis ·
+  - **Adds** (inimigos menores) que perseguem você e dão dano de contato — troque de
+    alvo e limpe-os, ou tome dano tentando conjurar parado.
+  - **Fase 1** (100–66%): AoE + adds · **Fase 2** (66–33%): + projéteis ·
     **Fase 3** (33–0%): dois AoEs ao mesmo tempo + projéteis mais rápidos.
   - Aviso de **"FASE X!"** e o boss muda de cor a cada virada.
 - Vitória (matar o boss), derrota (morrer) e reinício rápido.
@@ -32,11 +37,12 @@ Não há dependências externas nem passos de build.
 
 ## Controles
 
-| Ação          | Tecla        |
-|---------------|--------------|
-| Mover         | `W A S D`    |
-| Travar alvo   | `Tab`        |
-| Reiniciar     | `R`          |
+| Ação                         | Comando              |
+|------------------------------|----------------------|
+| Mover                        | `W A S D`            |
+| Conjurar (dano principal)    | ficar **parado**     |
+| Selecionar alvo              | `Tab` ou clique      |
+| Reiniciar                    | `R`                  |
 
 ## Estrutura
 
@@ -44,10 +50,11 @@ Não há dependências externas nem passos de build.
 project.godot      # configuração do projeto (Godot 4.x)
 Main.tscn          # cena principal
 scripts/
-  main.gd          # arena, HUD, projéteis e estado de jogo (vitória/derrota/restart)
-  player.gd        # Mago: movimento + auto-attack no alvo
-  boss.gd          # boss: fases + AoE telegrafado + disparo de projéteis
+  main.gd          # arena, HUD, entidades e estado de jogo; Tab/clique de alvo
+  player.gd        # Mago: movimento + auto-attack + conjuração parado + troca de alvo
+  boss.gd          # boss: fases + AoE + projéteis + spawn de adds
   projectile.gd    # projétil do boss (fase 2+)
+  add.gd           # inimigo menor que persegue o jogador
 ```
 
 Tudo desenhado com formas simples (`_draw`) — arte placeholder por design

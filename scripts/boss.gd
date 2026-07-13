@@ -1,16 +1,18 @@
 extends Node2D
 class_name Boss
-## Boss de protótipo com fases e duas mecânicas.
+## Boss de protótipo com fases e três mecânicas.
 ##
 ## Mecânica A — AoE telegrafado no chão (círculo vermelho que cresce durante o
 ## aviso; ao fim, detona e dá dano em quem estiver dentro). Mira na posição do
 ## jogador no início do aviso.
 ## Mecânica B — projéteis (fase 2+), disparados na direção do jogador.
+## Mecânica C — adds (inimigos menores) que perseguem o jogador; forçam troca
+## de alvo (Tab/clique).
 ##
 ## Fases por % de vida:
-##   Fase 1 (100–66%): só AoE.
-##   Fase 2 (66–33%):  AoE mais frequente + projéteis.
-##   Fase 3 (33–0%):   dois AoEs simultâneos + projéteis mais rápidos.
+##   Fase 1 (100–66%): AoE + adds.
+##   Fase 2 (66–33%):  AoE mais frequente + projéteis + adds.
+##   Fase 3 (33–0%):   dois AoEs simultâneos + projéteis mais rápidos + adds.
 
 signal died
 signal phase_changed(new_phase: int)
@@ -22,16 +24,24 @@ const AOE_TELEGRAPH := 1.3
 const AOE_RADIUS := 90.0
 const AOE_DAMAGE := 35.0
 
+const ADD_SPAWN_INTERVAL := 7.0
+const MAX_ADDS := 3
+
 var arena_rect := Rect2()
 var hp := MAX_HP
 var player: Node2D = null
-var projectile_parent: Node2D = null
+var entity_parent: Node2D = null  # onde projéteis e adds são criados (mundo)
 
 var _alive := true
 var phase := 1
 var _aoes: Array = []   # cada item: {"pos": Vector2, "timer": float}
 var _aoe_cd := 1.5
 var _proj_cd := 1.0
+var _add_cd := 6.0
+
+
+func _ready() -> void:
+	add_to_group("targetable")
 
 
 func _process(delta: float) -> void:
@@ -40,6 +50,7 @@ func _process(delta: float) -> void:
 	_update_phase()
 	_update_aoes(delta)
 	_update_projectiles(delta)
+	_update_adds(delta)
 	queue_redraw()
 
 
@@ -92,7 +103,7 @@ func _update_projectiles(delta: float) -> void:
 
 
 func _fire_projectile() -> void:
-	if projectile_parent == null or player == null or not is_instance_valid(player):
+	if entity_parent == null or player == null or not is_instance_valid(player):
 		return
 	var proj := Projectile.new()
 	proj.position = position
@@ -101,7 +112,33 @@ func _fire_projectile() -> void:
 	var dir := player.position - position
 	dir = dir.normalized() if dir.length() > 0.1 else Vector2.DOWN
 	proj.velocity = dir * Projectile.SPEED
-	projectile_parent.add_child(proj)
+	entity_parent.add_child(proj)
+
+
+func _update_adds(delta: float) -> void:
+	_add_cd -= delta
+	if _add_cd <= 0.0:
+		_add_cd = ADD_SPAWN_INTERVAL
+		_spawn_add()
+
+
+func _spawn_add() -> void:
+	if entity_parent == null or player == null or not is_instance_valid(player):
+		return
+	if _count_adds() >= MAX_ADDS:
+		return
+	var a := Add.new()
+	a.player = player
+	a.position = position + Vector2(randf_range(-45.0, 45.0), randf_range(-45.0, 45.0))
+	entity_parent.add_child(a)
+
+
+func _count_adds() -> int:
+	var c := 0
+	for n: Node in entity_parent.get_children():
+		if n is Add:
+			c += 1
+	return c
 
 
 func _detonate(pos: Vector2) -> void:
@@ -121,6 +158,10 @@ func _random_arena_point() -> Vector2:
 	var x := randf_range(arena_rect.position.x + m, arena_rect.end.x - m)
 	var y := randf_range(arena_rect.position.y + m, arena_rect.end.y - m)
 	return Vector2(x, y)
+
+
+func pick_radius() -> float:
+	return RADIUS + 6.0
 
 
 func take_damage(amount: float) -> void:
