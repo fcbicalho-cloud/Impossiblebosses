@@ -165,6 +165,6 @@ func _draw_hp_bar() -> void:
 	draw_rect(Rect2(off, Vector2(w, h)), Color(0, 0, 0, 0.6), true)
 	draw_rect(Rect2(off, Vector2(w * (hp / MAX_HP), h)), Color(0.9, 0.3, 0.3), true)
 	# Marcadores das viradas de fase (66% e 33%).
-	for t in [0.33, 0.66]:
-		var x := off.x + w * t
+	for t: float in [0.33, 0.66]:
+		var x: float = off.x + w * t
 		draw_line(Vector2(x, off.y), Vector2(x, off.y + h), Color(0, 0, 0, 0.8), 1.0)
