@@ -1,8 +1,9 @@
 extends Node2D
 class_name Projectile
 ## Projétil do boss (fase 2+). Viaja em linha reta na direção capturada no
-## momento do disparo; causa dano se acertar o jogador. Some ao sair da arena.
-## Dodge = andar para fora da trajetória (ele mira em onde você estava).
+## momento do disparo; causa dano a QUALQUER membro do grupo "party" que
+## tocar nele. Some ao sair da arena.
+## Dodge = andar para fora da trajetória (ele mira em onde o alvo estava).
 
 const SPEED := 260.0
 const RADIUS := 8.0
@@ -10,16 +11,17 @@ const DAMAGE := 20.0
 
 var velocity := Vector2.ZERO
 var arena_rect := Rect2()
-var player: Node2D = null
 
 
 func _process(delta: float) -> void:
 	position += velocity * delta
 
-	if player != null and is_instance_valid(player):
-		if position.distance_to(player.position) <= RADIUS + Player.RADIUS:
-			if player.has_method("take_damage"):
-				player.take_damage(DAMAGE)
+	for n: PartyMember in get_tree().get_nodes_in_group("party"):
+		if not is_instance_valid(n) or not n.alive:
+			continue
+		var hit_radius: float = RADIUS + n.radius
+		if position.distance_to(n.position) <= hit_radius:
+			n.take_damage(DAMAGE)
 			queue_free()
 			return
 

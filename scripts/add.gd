@@ -1,9 +1,8 @@
 extends Node2D
 class_name Add
-## Inimigo menor ("add"). Anda em direção ao jogador e causa dano de contato.
-## É alvo válido do tab-target (grupo "targetable"): mate-o trocando de alvo
-## (Tab ou clique) e conjurando/atirando nele. Ignorar adds = tomar dano
-## constante enquanto tenta conjurar parado no boss.
+## Inimigo menor ("add"). Persegue o membro mais próximo do grupo "party" e
+## causa dano de contato. É alvo válido do tab-target (grupo "targetable").
+## Mate-o com o Mago (Tab/clique) ou ele desgasta quem estiver por perto.
 
 const HP_MAX := 40.0
 const RADIUS := 11.0
@@ -12,7 +11,6 @@ const CONTACT_RANGE := 24.0
 const CONTACT_DAMAGE := 6.0
 const CONTACT_INTERVAL := 0.9
 
-var player: Node2D = null
 var hp := HP_MAX
 
 var _contact_cd := 0.0
@@ -28,14 +26,28 @@ func _process(delta: float) -> void:
 	if not _alive:
 		return
 	_contact_cd = maxf(0.0, _contact_cd - delta)
-	if player != null and is_instance_valid(player):
-		var to_player := player.position - position
-		if to_player.length() > CONTACT_RANGE:
-			position += to_player.normalized() * SPEED * delta
-		elif _contact_cd == 0.0 and player.has_method("take_damage"):
+	var target: PartyMember = _nearest_party_member()
+	if target != null:
+		var to_target: Vector2 = target.position - position
+		if to_target.length() > CONTACT_RANGE:
+			position += to_target.normalized() * SPEED * delta
+		elif _contact_cd == 0.0:
 			_contact_cd = CONTACT_INTERVAL
-			player.take_damage(CONTACT_DAMAGE)
+			target.take_damage(CONTACT_DAMAGE)
 	queue_redraw()
+
+
+func _nearest_party_member() -> PartyMember:
+	var best: PartyMember = null
+	var best_d := INF
+	for n: PartyMember in get_tree().get_nodes_in_group("party"):
+		if not is_instance_valid(n) or not n.alive:
+			continue
+		var d: float = position.distance_to(n.position)
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
 
 
 func pick_radius() -> float:
