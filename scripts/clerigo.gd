@@ -62,7 +62,7 @@ func _process(delta: float) -> void:
 
 	var moving: bool
 	if is_bot:
-		moving = false  # bot fica parado (simplificação — sem dodge de AoE)
+		moving = _bot_move(delta)
 		_bot_decide()
 	else:
 		moving = _human_move(delta)
@@ -78,6 +78,15 @@ func _human_move(delta: float) -> bool:
 		position += dir.normalized() * SPEED * delta
 		_clamp_to_arena()
 	return moving
+
+
+func _bot_move(delta: float) -> bool:
+	var flee := _aoe_flee_vector()
+	if flee != Vector2.ZERO:
+		position += flee * SPEED * delta
+		_clamp_to_arena()
+		return true
+	return false
 
 
 func _progress_cast(delta: float, moving: bool) -> void:
@@ -107,6 +116,49 @@ func _progress_cast(delta: float, moving: bool) -> void:
 func _notify_threat(amount: float) -> void:
 	if boss != null and is_instance_valid(boss) and boss.has_method("add_threat"):
 		boss.add_threat(self, amount)
+
+
+## Usado pelo HUD (main.gd) para desenhar o painel de habilidades: nome,
+## custo, recurso atual/máximo e cooldown restante/máximo. Cura e Rez não têm
+## cooldown próprio (só custo de mana + tempo de cast), então retornam 0/0.
+func get_ability_info(index: int) -> Dictionary:
+	if index == 1:
+		return {
+			"name": "Cura",
+			"cost": CURA_COST,
+			"resource_current": mana,
+			"resource_max": MANA_MAX,
+			"cooldown_remaining": 0.0,
+			"cooldown_max": 0.0,
+		}
+	elif index == 2:
+		return {
+			"name": "Cura Rapida",
+			"cost": RAPIDA_COST,
+			"resource_current": mana,
+			"resource_max": MANA_MAX,
+			"cooldown_remaining": _rapida_cd,
+			"cooldown_max": RAPIDA_COOLDOWN,
+		}
+	elif index == 3:
+		return {
+			"name": "Escudo",
+			"cost": ESCUDO_COST,
+			"resource_current": mana,
+			"resource_max": MANA_MAX,
+			"cooldown_remaining": _escudo_cd,
+			"cooldown_max": ESCUDO_COOLDOWN,
+		}
+	elif index == 4:
+		return {
+			"name": "Ressurreicao (%d carga)" % (boss.rez_charges if boss != null and is_instance_valid(boss) else 0),
+			"cost": REZ_COST,
+			"resource_current": mana,
+			"resource_max": MANA_MAX,
+			"cooldown_remaining": 0.0,
+			"cooldown_max": 0.0,
+		}
+	return {}
 
 
 func activate_ability(index: int) -> void:

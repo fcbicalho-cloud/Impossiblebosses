@@ -49,6 +49,14 @@ Tem **fases por % de vida** e mecânicas que forçam o uso da trindade:
 
 Vitória (matar o boss), derrota (wipe — todos mortos) e reinício rápido (R).
 
+### Painel de habilidades (cooldown e custo)
+
+A 3ª linha do texto embaixo da arena mostra, ao vivo, cada habilidade do papel que
+você controla: nome, custo do recurso e cooldown restante (ex.: `[2] Muralha
+(custo 30): 4.2s`, ou `pronto` quando disponível). Pro Mago, que não tem tecla de
+habilidade, essa linha mostra o estado da conjuração (`Conjurando: 60%`,
+`Pronto pra conjurar...`, etc.).
+
 ## Como rodar
 
 1. Instale o **Godot 4.3+** (gratuito): <https://godotengine.org/download>
@@ -92,10 +100,15 @@ Tudo desenhado com formas simples (`_draw`) — arte placeholder por design
 
 - Cura sempre mira automaticamente o aliado com menos vida (sem seleção manual de
   aliado) — reduz controle sem perder a decisão real (qual habilidade, quando).
-- Bots do Healer/Tank não desviam de AoE (o Mago-bot desvia; os outros dois
-  aceitam o risco). Simplificação de escopo, não decisão final de design.
+- **Guardiao-bot não se reposiciona** além de se aproximar do boss uma vez no início
+  — ele "tanca" ficando parado colado no boss, que é o comportamento correto de
+  segurar aggro, mas não é visualmente muito expressivo. O feedback de que ele está
+  agindo vem do painel de habilidades (barra de Ira enchendo, Muralha ativando) e do
+  anel vermelho ao redor dele quando é o alvo do boss.
 - Fonte de input é local (teclado) ou bot; ainda não existe uma fonte de rede — é
   o próximo ponto de extensão natural para o multiplayer (ver escopo, seção 6).
+- A linha de habilidades pode ficar comprida/apertada com o Clerigo (4 habilidades
+  numa linha só) — é só texto de depuração por enquanto, não uma UI final.
 
 ## Próximos passos sugeridos
 

@@ -261,7 +261,7 @@ func _update_hint() -> void:
 	var boss_txt := ""
 	if is_instance_valid(boss):
 		boss_txt = "Boss: %d HP  Fase %d  Rez: %d" % [int(round(boss.hp)), boss.phase, boss.rez_charges]
-	_hint_label.text = "%s\n%s   |   %s" % [_control_hint(), members_txt, boss_txt]
+	_hint_label.text = "%s\n%s   |   %s\n%s" % [_control_hint(), members_txt, boss_txt, _format_ability_line()]
 
 
 func _member_summary(m: PartyMember) -> String:
@@ -279,14 +279,65 @@ func _member_summary(m: PartyMember) -> String:
 
 
 func _control_hint() -> String:
-	match human_role:
-		"tank":
-			return "WASD mover | auto-attack automatico em alcance | 1 Provocar | 2 Muralha"
-		"healer":
-			return "WASD mover | 1 Cura(parado) | 2 Cura Rapida | 3 Escudo | 4 Rez"
-		"dps":
-			return "WASD mover | PARADO = conjura (dano principal) | Tab/clique = alvo"
+	if human_role == "tank":
+		return "WASD mover | auto-attack automatico em alcance no boss"
+	elif human_role == "healer":
+		return "WASD mover | cura sempre mira o aliado com menos vida"
+	elif human_role == "dps":
+		return "WASD mover | PARADO = conjura (dano principal) | Tab/clique = alvo"
 	return ""
+
+
+## Linha de habilidades: cooldown restante e custo de cada tecla, ou (pro
+## Mago, que não tem tecla de habilidade) o estado da conjuração.
+func _format_ability_line() -> String:
+	if human_unit == null or not is_instance_valid(human_unit):
+		return ""
+	if human_unit.has_method("get_ability_info"):
+		var parts := ""
+		for i in range(1, 5):
+			var info: Dictionary = human_unit.get_ability_info(i)
+			if info.is_empty():
+				continue
+			if parts != "":
+				parts += "   "
+			parts += _format_ability_slot(i, info)
+		return parts
+	elif human_unit.has_method("get_cast_status"):
+		var status: Dictionary = human_unit.get_cast_status()
+		return _format_cast_status(status)
+	return ""
+
+
+func _format_ability_slot(index: int, info: Dictionary) -> String:
+	var ability_name: String = info.get("name", "?")
+	var cost: float = info.get("cost", 0.0)
+	var resource_current: float = info.get("resource_current", 0.0)
+	var cd_remaining: float = info.get("cooldown_remaining", 0.0)
+	var status_txt := "pronto"
+	if cd_remaining > 0.05:
+		status_txt = "%.1fs" % cd_remaining
+	elif cost > 0.0 and resource_current < cost:
+		status_txt = "sem recurso"
+	var cost_txt := ""
+	if cost > 0.0:
+		cost_txt = " (custo %d)" % int(round(cost))
+	return "[%d] %s%s: %s" % [index, ability_name, cost_txt, status_txt]
+
+
+func _format_cast_status(status: Dictionary) -> String:
+	var casting: bool = status.get("casting", false)
+	var interrupted: bool = status.get("interrupted", false)
+	if casting:
+		var progress: float = status.get("progress", 0.0)
+		var cast_time: float = status.get("cast_time", 1.0)
+		var pct := 0
+		if cast_time > 0.0:
+			pct = int(round(100.0 * progress / cast_time))
+		return "Conjurando: %d%%" % pct
+	elif interrupted:
+		return "Conjuracao interrompida!"
+	return "Pronto pra conjurar (fique parado no alvo)"
 
 
 func _draw() -> void:

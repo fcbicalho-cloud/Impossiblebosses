@@ -94,6 +94,30 @@ func _handle_autoattack(delta: float) -> void:
 			boss.add_threat(self, ATTACK_DAMAGE * THREAT_MULTIPLIER)
 
 
+## Usado pelo HUD (main.gd) para desenhar o painel de habilidades: nome,
+## custo, recurso atual/máximo e cooldown restante/máximo.
+func get_ability_info(index: int) -> Dictionary:
+	if index == 1:
+		return {
+			"name": "Provocar",
+			"cost": 0.0,
+			"resource_current": ira,
+			"resource_max": IRA_MAX,
+			"cooldown_remaining": _taunt_cd,
+			"cooldown_max": TAUNT_COOLDOWN,
+		}
+	elif index == 2:
+		return {
+			"name": "Muralha",
+			"cost": MURALHA_IRA_COST,
+			"resource_current": ira,
+			"resource_max": IRA_MAX,
+			"cooldown_remaining": _muralha_cd,
+			"cooldown_max": MURALHA_COOLDOWN,
+		}
+	return {}
+
+
 func activate_ability(index: int) -> void:
 	if not alive:
 		return
