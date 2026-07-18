@@ -1,15 +1,16 @@
 extends Actor
 class_name Boss
-## Boss — Fase 2 (mínimo jogável). Estende Actor (HP unificado + juice).
+## Boss — Fase 3. Estende Actor (HP unificado + juice).
 ##
-## Uma mecânica: AoE telegrafado no chão (círculo vermelho que cresce durante o
-## aviso; ao fim, detona, dá dano e solta uma explosão visual). Mira num membro
-## aleatório do grupo "party" no início do aviso, dando tempo de sair.
+## Mecânicas:
+##   - Ameaça/aggro: tabela de threat; o corpo-a-corpo periódico bate em quem
+##     tem MAIS threat (exige um tank segurando aggro; sem tank, bate em quem
+##     causou mais dano).
+##   - AoE telegrafado no chão, mirado num membro aleatório do grupo "party"
+##     (mecânica "espalha" — qualquer um pode ser o alvo, inclusive o tank).
 ##
-## Visual procedural: orbe sombrio com aura pulsante, chifres e olhos brilhantes;
-## flash ao tomar dano (herdado de Actor).
-##
-## Threat/aggro, fases, corpo-a-corpo, adds e projéteis voltam nas fases 3-4.
+## Visual: orbe sombrio com aura pulsante, chifres e olhos brilhantes.
+## Fases, adds e projéteis voltam na Fase 5.
 
 signal phase_changed(new_phase: int)
 
@@ -18,11 +19,19 @@ const AOE_RADIUS := 90.0
 const AOE_DAMAGE := 35.0
 const AOE_COOLDOWN := 2.6
 
+const MELEE_INTERVAL := 1.6
+const MELEE_DAMAGE := 26.0
+const TAUNT_THREAT_BONUS := 40.0
+
 var arena_rect := Rect2()
 var phase := 1
 
 var _aoes: Array = []   # cada item: {"pos": Vector2, "timer": float}
 var _aoe_cd := 1.5
+var _melee_cd := 2.0
+
+var _threat_members: Array = []   # PartyMember (guardados sem tipo estrito)
+var _threat_values := {}          # instance_id(int) -> float
 
 
 func _ready() -> void:
@@ -36,9 +45,66 @@ func _process(delta: float) -> void:
 	if not alive:
 		return
 	_tick_visuals(delta)
+	_update_melee(delta)
 	_update_aoes(delta)
 	queue_redraw()
 
+
+# --- Ameaça / aggro --------------------------------------------------------
+
+func add_threat(source: PartyMember, amount: float) -> void:
+	if source == null or not is_instance_valid(source) or amount <= 0.0:
+		return
+	var id := source.get_instance_id()
+	if not _threat_values.has(id):
+		_threat_members.append(source)
+	_threat_values[id] = float(_threat_values.get(id, 0.0)) + amount
+
+
+func taunt(source: PartyMember) -> void:
+	if source == null or not is_instance_valid(source):
+		return
+	add_threat(source, _highest_threat_value() + TAUNT_THREAT_BONUS)
+
+
+func current_target() -> PartyMember:
+	var best: PartyMember = null
+	var best_v := -1.0
+	for m: PartyMember in _threat_members:
+		if not is_instance_valid(m) or not m.alive:
+			continue
+		var v: float = _threat_values.get(m.get_instance_id(), 0.0)
+		if v > best_v:
+			best_v = v
+			best = m
+	return best
+
+
+func _highest_threat_value() -> float:
+	var best := 0.0
+	for m: PartyMember in _threat_members:
+		if not is_instance_valid(m):
+			continue
+		var v: float = _threat_values.get(m.get_instance_id(), 0.0)
+		if v > best:
+			best = v
+	return best
+
+
+# --- Corpo-a-corpo (exige tank) -------------------------------------------
+
+func _update_melee(delta: float) -> void:
+	_melee_cd -= delta
+	if _melee_cd > 0.0:
+		return
+	var t: PartyMember = current_target()
+	if t == null:
+		return
+	_melee_cd = MELEE_INTERVAL
+	t.take_damage(MELEE_DAMAGE)
+
+
+# --- AoE telegrafado -------------------------------------------------------
 
 func _update_aoes(delta: float) -> void:
 	for i in range(_aoes.size() - 1, -1, -1):
@@ -94,8 +160,9 @@ func get_active_aoes() -> Array:
 	return out
 
 
+# --- Visual ----------------------------------------------------------------
+
 func _draw() -> void:
-	# AoEs telegrafados (no chão, sob o boss).
 	for aoe in _aoes:
 		var local: Vector2 = aoe["pos"] - position
 		var frac: float = clampf(1.0 - (aoe["timer"] / AOE_TELEGRAPH), 0.0, 1.0)
@@ -111,13 +178,11 @@ func _draw_body() -> void:
 	var dead := not alive
 	var pulse := 0.5 + 0.5 * sin(anim_time * 2.0)
 
-	# Aura pulsante.
 	if not dead:
 		draw_circle(Vector2.ZERO, radius * (1.55 + 0.25 * pulse), Color(0.9, 0.2, 0.3, 0.05 + 0.05 * pulse))
 		draw_circle(Vector2.ZERO, radius * (1.25 + 0.12 * pulse), Color(0.9, 0.25, 0.35, 0.10))
 
 	var horn := _flash_mix(Color(0.55, 0.18, 0.22) if not dead else Color(0.4, 0.3, 0.32))
-	# Chifres.
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(-radius * 0.72, -radius * 0.45),
 		Vector2(-radius * 0.32, -radius * 0.55),
@@ -129,13 +194,11 @@ func _draw_body() -> void:
 		Vector2(radius * 0.52, -radius * 1.15),
 	]), horn)
 
-	# Corpo.
 	var body := _flash_mix(Color(0.82, 0.3, 0.35) if not dead else Color(0.45, 0.3, 0.32))
 	draw_circle(Vector2.ZERO, radius, body)
 	draw_circle(Vector2.ZERO, radius * 0.62, Color(0.5, 0.14, 0.2, 0.5))
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, _flash_mix(Color(1.0, 0.85, 0.85)), 3.0)
 
-	# Olhos brilhantes.
 	if not dead:
 		var eye := Color(1.0, 0.85, 0.3)
 		draw_circle(Vector2(-radius * 0.3, -radius * 0.08), radius * 0.13, eye)

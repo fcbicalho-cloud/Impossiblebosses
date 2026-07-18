@@ -88,3 +88,11 @@ func _aoe_flee_vector() -> Vector2:
 func _draw_shield_overlay() -> void:
 	if shield > 0.0:
 		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 20, Color(0.6, 0.85, 1.0, 0.7), 2.0)
+
+
+## Verdadeiro se este membro é o alvo atual do corpo-a-corpo do boss (topo da
+## tabela de threat). Usado pelo tank pra saber se está segurando o aggro.
+func _is_boss_target() -> bool:
+	if boss == null or not is_instance_valid(boss) or not boss.has_method("current_target"):
+		return false
+	return boss.current_target() == self
