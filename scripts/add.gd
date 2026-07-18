@@ -1,0 +1,101 @@
+extends Actor
+class_name Add
+## Add — inimigo menor que entra em ondas nas mudanças de fase do boss.
+##
+## Função de design (ESCOPO seção 9): forçar REPRIORIZAÇÃO. Ele persegue o
+## membro VIVO mais próximo e bate nele, ignorando threat — ou seja, vai atrás de
+## quem estiver exposto (tipicamente healer/dps), e não do tank. A resposta certa
+## é o dps trocar de alvo e limpá-lo rápido, não o tank tentar segurar tudo.
+##
+## Entra em "targetable" (alvo de Tab/clique, como o boss) e em "add" (para o dps
+## bot priorizar). Ao morrer sai dos grupos e se libera — diferente do boss, que
+## permanece na cena.
+
+const SPEED := 120.0
+const MELEE_RANGE := 34.0
+const ATTACK_INTERVAL := 1.2
+
+var damage := 8.0
+var arena_rect := Rect2()
+
+var _attack_cd := 0.6
+var _facing := Vector2(0.0, 1.0)
+
+
+func _ready() -> void:
+	add_to_group("targetable")
+	add_to_group("add")
+	radius = 11.0
+	_setup_body_sprite(preload("res://assets/characters/add.png"), 2.0)
+
+
+func setup(hp_value: float, damage_value: float, arena: Rect2) -> void:
+	max_hp = hp_value
+	hp = hp_value
+	damage = damage_value
+	arena_rect = arena
+
+
+func _process(delta: float) -> void:
+	_update_sprite()
+	if not alive:
+		return
+	_tick_visuals(delta)
+	var victim := _nearest_victim()
+	if victim != null:
+		var to_victim: Vector2 = victim.position - position
+		if to_victim.length() > 1.0:
+			_facing = to_victim.normalized()
+		if to_victim.length() > MELEE_RANGE:
+			position += _facing * SPEED * delta
+			_clamp_to_arena()
+	_attack_cd = maxf(0.0, _attack_cd - delta)
+	if victim != null and _attack_cd == 0.0:
+		if position.distance_to(victim.position) <= MELEE_RANGE:
+			_attack_cd = ATTACK_INTERVAL
+			victim.take_damage(damage)
+	queue_redraw()
+
+
+func _nearest_victim() -> PartyMember:
+	var best: PartyMember = null
+	var best_d := INF
+	for m: PartyMember in get_tree().get_nodes_in_group("party"):
+		if not is_instance_valid(m) or not m.alive:
+			continue
+		var d: float = position.distance_to(m.position)
+		if d < best_d:
+			best_d = d
+			best = m
+	return best
+
+
+func _clamp_to_arena() -> void:
+	if arena_rect.size == Vector2.ZERO:
+		return
+	position.x = clampf(position.x, arena_rect.position.x + radius, arena_rect.end.x - radius)
+	position.y = clampf(position.y, arena_rect.position.y + radius, arena_rect.end.y - radius)
+
+
+## Ponto de extensão do Actor: o add some da cena ao morrer (sai dos grupos antes
+## do queue_free para não aparecer em buscas no frame em que morre).
+func _die() -> void:
+	super._die()
+	remove_from_group("targetable")
+	remove_from_group("add")
+	queue_free()
+
+
+func _update_sprite() -> void:
+	if body_sprite == null or not alive:
+		return
+	body_sprite.position = Vector2(0.0, -sin(anim_time * 6.0) * 1.5)
+	if absf(_facing.x) > 0.1:
+		body_sprite.flip_h = _facing.x < 0.0
+
+
+func _draw() -> void:
+	if not alive:
+		return
+	_draw_sprite_shadow()
+	_draw_hp_bar(24.0, 4.0, -radius - 10.0, Color(0.9, 0.5, 0.3))

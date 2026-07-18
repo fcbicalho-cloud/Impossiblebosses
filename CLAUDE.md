@@ -40,6 +40,16 @@ Herança: `Actor` → `PartyMember` → papéis.
 - `boss.gd` — tabela de threat (`add_threat`/`taunt`/`current_target`), corpo-a-corpo
   no topo do threat, AoE telegrafado em membro aleatório, `get_active_aoes()` (bots
   desviam), `rez_charges`. Grupo `"targetable"` (inimigos alvo de Tab/clique).
+  **Fases** em 66%/33% de vida (cada uma acelera o AoE, sobe o melee e solta uma onda
+  de adds) e **enrage** por tempo, com o dano acumulado em `damage_multiplier()`.
+- `difficulty.gd` — preset Normal/Heroico/Impossivel. TODO número que muda entre
+  dificuldades mora aqui; boss e adds leem daqui em vez de ter constantes próprias.
+  Classe tipada (não Dictionary) por causa da armadilha 2 abaixo. O Main seta
+  `boss.difficulty` **antes** do `add_child`, porque o `_ready` do boss já a aplica.
+- `add.gd` — inimigo menor das ondas. Persegue o membro vivo mais PRÓXIMO ignorando
+  threat, então vai atrás de quem está exposto e não do tank. Nasce nas bordas da
+  arena (nascer perto do boss fazia todos grudarem no tank). Grupos `"targetable"` e
+  `"add"`; ao morrer sai dos grupos e se libera.
 - `main.gd` — orquestrador: escolha de papel (1/2/3), spawn, HUD, roteamento de
   teclas, wipe/vitória, container `_world` (grupo `"fx"`) para entidades/efeitos
   transitórios. HUD lê `get_ability_info(index)`/`get_cast_status()` dos papéis —
@@ -98,8 +108,16 @@ a saída no terminal. Comandos:
 godot --headless --path . --import                    # importa assets
 godot --headless --path . -s tests/smoke_sprites.gd   # 4 personagens + mira do clerigo
 godot --headless --path . -s tests/smoke_arena.gd     # tilemap + spawn do encontro
-godot --path . -s tests/capture_screenshot.gd -- x.png  # screenshot (abre janela)
+godot --headless --path . -s tests/smoke_encontro.gd  # dificuldade, fases, adds, enrage
+godot --path . -s tests/capture_screenshot.gd -- x.png [selecao|luta|adds]  # abre janela
 ```
+
+Cuidados ao escrever testes assim:
+- **Não guarde referência a nó liberado.** `_start_encounter()` libera o boss antigo;
+  ler um campo dele depois dispara erro por frame e o `quit()` nunca acontece — o teste
+  roda para sempre gerando megabytes de log. Copie o valor antes de reiniciar.
+- No PowerShell, **não** filtre a saída com `Select-Object -First N`: isso corta o
+  pipeline, mata o processo e falseia o `$LASTEXITCODE`.
 
 Os smokes imprimem `SMOKE OK`/`SMOKE FALHOU` e usam exit code. A captura de tela é
 a forma de conferir o visual sem depender do usuário — ela já pegou bugs reais

@@ -47,6 +47,8 @@ func _process(delta: float) -> void:
 		_interrupt_timer -= delta
 	if target == null or not is_instance_valid(target):
 		_acquire_nearest_enemy()
+	elif is_bot:
+		_bot_prioritize_adds()
 	if target != null and is_instance_valid(target):
 		var tv: Vector2 = target.position - position
 		if tv.length() > 1.0:
@@ -133,6 +135,26 @@ func cycle_target() -> void:
 		return
 	var idx := list.find(target)
 	target = list[(idx + 1) % list.size()]
+
+
+## Bot: add na arena vira prioridade sobre o boss (ESCOPO 7.1 — "troca rápida
+## para adds"). Sem isto os adds seriam ignorados pelo dps bot e a mecânica de
+## repriorização não existiria no teste solo. O humano NÃO é retargetado: a
+## escolha de alvo é dele.
+func _bot_prioritize_adds() -> void:
+	if target is Add:
+		return
+	var best: Add = null
+	var best_d := INF
+	for a: Add in get_tree().get_nodes_in_group("add"):
+		if not is_instance_valid(a) or not a.alive:
+			continue
+		var d: float = position.distance_to(a.position)
+		if d < best_d:
+			best_d = d
+			best = a
+	if best != null:
+		target = best
 
 
 func _acquire_nearest_enemy() -> void:

@@ -31,6 +31,7 @@ const MAGO_START := Vector2(600, 430)
 
 var state := "select"  # "select" | "playing" | "won" | "lost"
 var human_role := ""   # "tank" | "healer" | "dps"
+var difficulty_index := Difficulty.NORMAL
 
 var boss: Boss
 var party: Array = []
@@ -40,6 +41,7 @@ var _world: Node2D
 var _status_label: Label
 var _hint_label: Label
 var _tiles: TileMapLayer
+var _phase_banner_timer := 0.0
 
 
 func _ready() -> void:
@@ -110,9 +112,13 @@ func _start_encounter() -> void:
 	_clear_encounter()
 
 	boss = Boss.new()
+	# difficulty ANTES do add_child: o _ready do Boss já aplica hp/enrage/rez.
+	boss.difficulty = Difficulty.preset(difficulty_index)
 	boss.arena_rect = ARENA_RECT
 	boss.position = BOSS_POS
+	boss.set_world(_world)
 	boss.died.connect(_on_boss_died)
+	boss.phase_changed.connect(_on_phase_changed)
 	add_child(boss)
 
 	var guardiao := Guardiao.new()
@@ -155,6 +161,8 @@ func _start_encounter() -> void:
 
 
 func _clear_encounter() -> void:
+	_phase_banner_timer = 0.0
+	_clear_adds()
 	for m in party:
 		if is_instance_valid(m):
 			m.queue_free()
@@ -167,8 +175,12 @@ func _clear_encounter() -> void:
 			child.queue_free()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_hint()
+	if _phase_banner_timer > 0.0:
+		_phase_banner_timer -= delta
+		if _phase_banner_timer <= 0.0 and state == "playing":
+			_status_label.text = ""
 	if state == "playing":
 		_check_wipe()
 
@@ -199,7 +211,11 @@ func _handle_key(keycode: int) -> void:
 		return
 
 	if state == "select":
-		if keycode == KEY_1:
+		if keycode == KEY_LEFT:
+			difficulty_index = (difficulty_index + Difficulty.COUNT - 1) % Difficulty.COUNT
+		elif keycode == KEY_RIGHT:
+			difficulty_index = (difficulty_index + 1) % Difficulty.COUNT
+		elif keycode == KEY_1:
 			human_role = "tank"
 			_start_encounter()
 		elif keycode == KEY_2:
@@ -247,12 +263,30 @@ func _try_click_target(world_pos: Vector2) -> void:
 		human_unit.target = best
 
 
+## Aviso de mudança de fase. Fica alguns segundos e some sozinho — a fase em si
+## já aparece continuamente no hint, isto é só o alerta do momento da virada.
+func _on_phase_changed(new_phase: int) -> void:
+	if state != "playing":
+		return
+	_status_label.text = "FASE %d" % new_phase
+	_status_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.25))
+	_phase_banner_timer = 2.5
+
+
 func _on_boss_died() -> void:
 	if state != "playing":
 		return
 	state = "won"
+	_phase_banner_timer = 0.0
+	_clear_adds()  # senão os adds sobreviventes continuam batendo após a vitória
 	_status_label.text = "VITORIA!"
 	_status_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
+
+
+func _clear_adds() -> void:
+	for a: Node in get_tree().get_nodes_in_group("add"):
+		if is_instance_valid(a):
+			a.queue_free()
 
 
 func _on_member_died(_unused = null) -> void:
@@ -287,7 +321,9 @@ func _update_hint() -> void:
 	if _hint_label == null:
 		return
 	if state == "select":
-		_hint_label.text = "Escolha seu papel:   1 = Guardiao (Tank)    2 = Clerigo (Healer)    3 = Mago (DPS)\nOs outros dois viram bots. R volta pra essa tela a qualquer momento."
+		var d := Difficulty.preset(difficulty_index)
+		_hint_label.text = "Dificuldade: < %s >  (setas Esq/Dir)   -   Boss %d HP | adds %d por onda | enrage %ds | rez %d\nEscolha seu papel:   1 = Guardiao (Tank)    2 = Clerigo (Healer)    3 = Mago (DPS)\nOs outros dois viram bots. R volta pra essa tela a qualquer momento." % [
+			d.label, int(d.boss_hp), d.adds_per_wave, int(d.enrage_seconds), d.rez_charges]
 		return
 	if state == "won":
 		_hint_label.text = "Voce venceu! Pressione R para escolher papel de novo."
@@ -304,8 +340,15 @@ func _update_hint() -> void:
 			members += _member_summary(m)
 	var boss_txt := ""
 	if is_instance_valid(boss):
-		boss_txt = "Boss: %d HP   Rez: %d" % [int(round(boss.hp)), boss.rez_charges]
-	_hint_label.text = "%s\n%s   |   %s" % [_control_hint(), members, boss_txt]
+		var timer_txt := "ENRAGE x%.2f" % boss.damage_multiplier() if boss.enraged else "enrage em %ds" % int(ceil(boss.enrage_remaining))
+		var adds := boss.active_add_count()
+		var adds_txt := "   Adds: %d" % adds if adds > 0 else ""
+		boss_txt = "[%s] Boss: %d HP (fase %d)   Rez: %d   %s%s" % [
+			Difficulty.label_for(difficulty_index), int(round(boss.hp)), boss.phase,
+			boss.rez_charges, timer_txt, adds_txt]
+	# Três linhas: controles / grupo / boss. Numa linha só, o texto estourava a
+	# largura da janela e cortava o fim.
+	_hint_label.text = "%s\n%s\n%s" % [_control_hint(), members, boss_txt]
 
 
 func _member_summary(m: PartyMember) -> String:

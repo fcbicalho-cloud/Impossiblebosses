@@ -8,6 +8,13 @@ class_name Boss
 ##     causou mais dano).
 ##   - AoE telegrafado no chão, mirado num membro aleatório do grupo "party"
 ##     (mecânica "espalha" — qualquer um pode ser o alvo, inclusive o tank).
+##   - FASES em 66% e 33% de vida: cada fase acelera o AoE, aumenta o
+##     corpo-a-corpo e solta uma onda de adds (ESCOPO seção 9).
+##   - ENRAGE por tempo: passado o limite da dificuldade, o dano cresce sem teto.
+##     É o relógio que impede a luta de se arrastar; recompensa dps.
+##
+## Números vêm do preset de Difficulty (setado pelo Main ANTES do add_child, pois
+## _ready já os aplica). Sem preset, cai no Normal.
 ##
 ## Visual: sprite 16×16 (Kenney Tiny Dungeon) escalado 4× — maior que os 3× dos
 ## jogadores, para o boss dominar a arena — com aura sombria pulsante e flash de
@@ -16,23 +23,33 @@ class_name Boss
 
 signal phase_changed(new_phase: int)
 
-const AOE_TELEGRAPH := 1.3
 const AOE_RADIUS := 90.0
-const AOE_DAMAGE := 35.0
-const AOE_COOLDOWN := 2.6
-
 const MELEE_INTERVAL := 1.6
-const MELEE_DAMAGE := 26.0
 const TAUNT_THREAT_BONUS := 40.0
-const REZ_CHARGES_PER_ENCOUNTER := 1
 
+## Limiares de vida que disparam as fases 2 e 3.
+const PHASE_THRESHOLDS: Array[float] = [0.66, 0.33]
+## Multiplicadores por fase (índice = fase - 1): AoE mais frequente e melee mais
+## forte conforme o boss cai de vida.
+const PHASE_AOE_SPEEDUP: Array[float] = [1.0, 0.85, 0.7]
+const PHASE_MELEE_MULT: Array[float] = [1.0, 1.15, 1.3]
+## A cada ENRAGE_STEP segundos após o enrage, o dano sobe ENRAGE_RAMP.
+const ENRAGE_STEP := 5.0
+const ENRAGE_RAMP := 0.25
+
+var difficulty: Difficulty = Difficulty.preset(Difficulty.NORMAL)
 var arena_rect := Rect2()
 var phase := 1
-var rez_charges := REZ_CHARGES_PER_ENCOUNTER
+var rez_charges := 2
+var enraged := false
+## Segundos restantes até o enrage (só para o HUD mostrar o relógio).
+var enrage_remaining := 0.0
 
 var _aoes: Array = []   # cada item: {"pos": Vector2, "timer": float}
 var _aoe_cd := 1.5
 var _melee_cd := 2.0
+var _enrage_elapsed := 0.0
+var _world: Node2D = null  # container onde os adds nascem (setado pelo Main)
 
 var _threat_members: Array = []   # PartyMember (guardados sem tipo estrito)
 var _threat_values := {}          # instance_id(int) -> float
@@ -40,10 +57,12 @@ var _threat_values := {}          # instance_id(int) -> float
 
 func _ready() -> void:
 	add_to_group("targetable")
-	max_hp = 450.0
+	max_hp = difficulty.boss_hp
 	hp = max_hp
 	radius = 30.0
-	rez_charges = REZ_CHARGES_PER_ENCOUNTER
+	rez_charges = difficulty.rez_charges
+	enrage_remaining = difficulty.enrage_seconds
+	_aoe_cd = difficulty.aoe_cooldown * 0.6  # primeira mecânica vem um pouco antes
 	_setup_body_sprite(preload("res://assets/characters/boss.png"), 4.0)
 
 
@@ -52,9 +71,101 @@ func _process(delta: float) -> void:
 	if not alive:
 		return
 	_tick_visuals(delta)
+	_update_phase()
+	_update_enrage(delta)
 	_update_melee(delta)
 	_update_aoes(delta)
 	queue_redraw()
+
+
+# --- Fases e enrage --------------------------------------------------------
+
+## Sobe de fase ao cruzar os limiares de vida. Só avança (não volta se o boss for
+## curado) e cada fase entrega uma onda de adds.
+func _update_phase() -> void:
+	var frac := hp_fraction()
+	var target_phase := 1
+	for t: float in PHASE_THRESHOLDS:
+		if frac <= t:
+			target_phase += 1
+	if target_phase <= phase:
+		return
+	# Uma onda POR fase cruzada: um burst grande de dano pode atravessar dois
+	# limiares no mesmo frame, e pular a onda do meio deixaria o dps burlar
+	# conteúdo simplesmente batendo forte.
+	for _p in range(target_phase - phase):
+		_spawn_add_wave()
+	phase = target_phase
+	phase_changed.emit(phase)
+
+
+func _update_enrage(delta: float) -> void:
+	if not enraged:
+		enrage_remaining = maxf(0.0, enrage_remaining - delta)
+		if enrage_remaining == 0.0:
+			enraged = true
+		return
+	_enrage_elapsed += delta
+
+
+## Multiplicador de dano acumulado: fase atual × rampa do enrage.
+func damage_multiplier() -> float:
+	var mult: float = PHASE_MELEE_MULT[clampi(phase - 1, 0, PHASE_MELEE_MULT.size() - 1)]
+	if enraged:
+		mult *= 1.0 + ENRAGE_RAMP * floor(_enrage_elapsed / ENRAGE_STEP)
+	return mult
+
+
+# --- Adds ------------------------------------------------------------------
+
+## Onda de adds entrando pelas BORDAS da arena, distribuídos ao longo do
+## perímetro. Nascer perto do boss não funcionava: o tank está sempre ali, então
+## todos os adds grudavam nele — viravam um borrão e não criavam pressão nenhuma.
+## Vindo da borda eles têm tempo de trajeto, dão para ser vistos chegando e
+## costumam alcançar quem estiver exposto. Sem container (_world), a onda é
+## silenciosamente ignorada.
+func _spawn_add_wave() -> void:
+	if _world == null or not is_instance_valid(_world) or arena_rect.size == Vector2.ZERO:
+		return
+	var count := difficulty.adds_per_wave
+	for i in range(count):
+		var t: float = fmod(float(i) / float(count) + randf() * 0.12, 1.0)
+		var a := Add.new()
+		a.setup(difficulty.add_hp, difficulty.add_damage, arena_rect)
+		_world.add_child(a)
+		a.position = _perimeter_point(t)
+
+
+## Ponto na borda da arena, com t em [0,1) percorrendo o perímetro no sentido
+## horário a partir do canto superior esquerdo.
+func _perimeter_point(t: float) -> Vector2:
+	var w := arena_rect.size.x
+	var h := arena_rect.size.y
+	var perimeter: float = 2.0 * (w + h)
+	var d: float = t * perimeter
+	var origin := arena_rect.position
+	if d < w:
+		return origin + Vector2(d, 0.0)
+	d -= w
+	if d < h:
+		return origin + Vector2(w, d)
+	d -= h
+	if d < w:
+		return origin + Vector2(w - d, h)
+	d -= w
+	return origin + Vector2(0.0, h - d)
+
+
+func set_world(world: Node2D) -> void:
+	_world = world
+
+
+func active_add_count() -> int:
+	var n := 0
+	for a: Node in get_tree().get_nodes_in_group("add"):
+		if is_instance_valid(a):
+			n += 1
+	return n
 
 
 # --- Ameaça / aggro --------------------------------------------------------
@@ -108,7 +219,7 @@ func _update_melee(delta: float) -> void:
 	if t == null:
 		return
 	_melee_cd = MELEE_INTERVAL
-	t.take_damage(MELEE_DAMAGE)
+	t.take_damage(difficulty.melee_damage * damage_multiplier())
 
 
 # --- AoE telegrafado -------------------------------------------------------
@@ -123,7 +234,8 @@ func _update_aoes(delta: float) -> void:
 	_aoe_cd -= delta
 	if _aoe_cd <= 0.0:
 		_cast_aoe()
-		_aoe_cd = AOE_COOLDOWN
+		var speedup: float = PHASE_AOE_SPEEDUP[clampi(phase - 1, 0, PHASE_AOE_SPEEDUP.size() - 1)]
+		_aoe_cd = difficulty.aoe_cooldown * speedup
 
 
 func _cast_aoe() -> void:
@@ -131,13 +243,13 @@ func _cast_aoe() -> void:
 	if party.is_empty():
 		return
 	var victim: PartyMember = party[randi() % party.size()]
-	_aoes.append({"pos": victim.position, "timer": AOE_TELEGRAPH})
+	_aoes.append({"pos": victim.position, "timer": difficulty.aoe_telegraph})
 
 
 func _detonate(pos: Vector2) -> void:
 	for m: PartyMember in _alive_party():
 		if m.position.distance_to(pos) <= AOE_RADIUS:
-			m.take_damage(AOE_DAMAGE)
+			m.take_damage(difficulty.aoe_damage * damage_multiplier())
 	_spawn_burst(pos)
 
 
@@ -172,7 +284,7 @@ func get_active_aoes() -> Array:
 func _draw() -> void:
 	for aoe in _aoes:
 		var local: Vector2 = aoe["pos"] - position
-		var frac: float = clampf(1.0 - (aoe["timer"] / AOE_TELEGRAPH), 0.0, 1.0)
+		var frac: float = clampf(1.0 - (aoe["timer"] / difficulty.aoe_telegraph), 0.0, 1.0)
 		draw_circle(local, AOE_RADIUS, Color(1.0, 0.2, 0.2, 0.14))
 		draw_circle(local, AOE_RADIUS * frac, Color(1.0, 0.25, 0.2, 0.34))
 		draw_arc(local, AOE_RADIUS, 0.0, TAU, 32, Color(1.0, 0.3, 0.3, 0.9), 2.5)
@@ -206,3 +318,8 @@ func _draw_aura() -> void:
 	var pulse: float = 0.5 + 0.5 * sin(anim_time * 2.0)
 	draw_circle(Vector2.ZERO, radius * (1.55 + 0.25 * pulse), Color(0.9, 0.2, 0.3, 0.05 + 0.05 * pulse))
 	draw_circle(Vector2.ZERO, radius * (1.25 + 0.12 * pulse), Color(0.9, 0.25, 0.35, 0.10))
+	# Enrage: anel vermelho batendo rápido, para a pressão de tempo ser visível na
+	# arena e não só no relógio do HUD.
+	if enraged:
+		var beat: float = 0.55 + 0.45 * sin(anim_time * 12.0)
+		draw_arc(Vector2.ZERO, radius * 1.5, 0.0, TAU, 32, Color(1.0, 0.25, 0.15, beat), 4.0)

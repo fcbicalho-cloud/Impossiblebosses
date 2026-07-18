@@ -6,8 +6,13 @@
 > funciona na prática. O tom é deliberadamente crítico — a ideia é expor riscos e
 > trade-offs, não vender o projeto para nós mesmos.
 
-**Status:** M0 (definição de escopo). Nenhum código ainda.
-**Última atualização:** 2026-07-13 (Revisão 1 — trindade, combate tab-target, alvo 8–10 players).
+**Status:** M1 em andamento (vertical slice solo com bots). Já em código: trindade
+completa (tank/healer/dps + bots), threat/aggro, cura/mana, combat-rez, AoE
+telegrafado, **fases do boss (66%/33%), adds e enrage**, e **3 níveis de
+dificuldade**. Arte deixou de ser placeholder (pixel art CC0 — ver `CLAUDE.md`).
+Falta para fechar M1: projéteis e as métricas de desempenho da seção 13.
+**Última atualização:** 2026-07-18 (Revisão 2 — status de implementação; o design
+das seções abaixo continua valendo como escrito).
 
 > **Nota de rumo (importante).** As decisões desta revisão aproximam o jogo de uma
 > **raid do WoW vista de cima**, não de um action-RPG estilo Zelda. O combate é
