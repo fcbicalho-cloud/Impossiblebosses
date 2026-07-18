@@ -8,11 +8,15 @@ nítida sem configuração extra por textura.
 
 ```
 assets/
-  characters/   # spritesheets dos personagens: mago, guardiao, clerigo, boss, adds
+  packs/        # packs originais completos, como baixados (fonte de verdade)
+  characters/   # tiles/spritesheets renomeados por papel: mago.png, guardiao.png...
   tiles/        # tilesets do chão/paredes da arena (16×16)
   fx/           # efeitos: explosões, projéteis, brilhos
   ui/           # ícones de habilidade, molduras de barra, cursores
 ```
+
+Os packs ficam intactos em `packs/<nome>/`; o que o jogo usa é copiado para as
+pastas por função com nome limpo (assim trocar de tile é só recopiar o arquivo).
 
 ## Convenções
 

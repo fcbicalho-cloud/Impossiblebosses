@@ -5,4 +5,4 @@ Registro obrigatório de todo asset de terceiros usado no jogo (ver regras em
 
 | Pack | Autor | Fonte (URL) | Licença | Uso |
 |------|-------|-------------|---------|-----|
-| _(nenhum ainda)_ | | | | |
+| Tiny Dungeon (1.0) | Kenney | https://kenney.nl/assets/tiny-dungeon | CC0 | Personagens (mago, guardião, clérigo, boss) em `characters/` e tileset da arena. Fonte completa em `packs/kenney_tiny_dungeon/`. |
