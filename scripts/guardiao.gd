@@ -23,6 +23,12 @@ const IRA_PER_HIT := 8.0
 const IRA_PER_DAMAGE_TAKEN := 0.4
 
 const TAUNT_COOLDOWN := 8.0
+## Provocar pega o boss e TODO add dentro deste raio, por TAUNT_ADD_DURATION
+## segundos. O raio existe para o posicionamento importar: puxar 3 adds de uma vez
+## exige o tank ir até eles, em vez de ser um botão global.
+const TAUNT_RADIUS := 220.0
+const TAUNT_ADD_DURATION := 4.0
+const TAUNT_FX_TIME := 0.45
 const MURALHA_COOLDOWN := 10.0
 const MURALHA_DURATION := 3.0
 const MURALHA_IRA_COST := 30.0
@@ -35,6 +41,7 @@ var _taunt_cd := 0.0
 var _muralha_cd := 0.0
 var _muralha_timer := 0.0
 var _facing := Vector2(0.0, -1.0)
+var _taunt_fx_timer := 0.0
 
 
 func _ready() -> void:
@@ -78,7 +85,9 @@ func _bot_process(delta: float) -> void:
 			var dir: Vector2 = (boss.position - position).normalized()
 			position += dir * SPEED * delta
 			_clamp_to_arena()
-	if not _is_boss_target() and _taunt_cd <= 0.0:
+	# Provocar quando perdeu o boss OU quando há add solto por perto (o tank é
+	# quem deve levar as pancadas dos adds, não o healer).
+	if _taunt_cd <= 0.0 and (not _is_boss_target() or _adds_soltos()):
 		_use_taunt()
 	elif hp_fraction() < 0.6 and _muralha_cd <= 0.0 and ira >= MURALHA_IRA_COST:
 		_use_muralha()
@@ -87,6 +96,7 @@ func _bot_process(delta: float) -> void:
 func _tick_cooldowns(delta: float) -> void:
 	_taunt_cd = maxf(0.0, _taunt_cd - delta)
 	_muralha_cd = maxf(0.0, _muralha_cd - delta)
+	_taunt_fx_timer = maxf(0.0, _taunt_fx_timer - delta)
 	if _muralha_timer > 0.0:
 		_muralha_timer -= delta
 
@@ -122,12 +132,32 @@ func get_ability_info(index: int) -> Dictionary:
 	return {}
 
 
+## Provocar: puxa o boss (tabela de threat) E os adds próximos (alvo forçado).
+## Antes só falava com o boss — como o threat 3× do tank já segurava o boss
+## sozinho, a habilidade não tinha efeito perceptível em lugar nenhum.
 func _use_taunt() -> void:
 	if _taunt_cd > 0.0:
 		return
 	_taunt_cd = TAUNT_COOLDOWN
+	_taunt_fx_timer = TAUNT_FX_TIME
 	if boss != null and is_instance_valid(boss) and boss.has_method("taunt"):
 		boss.taunt(self)
+	for a: Add in get_tree().get_nodes_in_group("add"):
+		if is_instance_valid(a) and a.alive and position.distance_to(a.position) <= TAUNT_RADIUS:
+			a.taunt(self, TAUNT_ADD_DURATION)
+
+
+## Verdadeiro se algum add está batendo em outra pessoa dentro do alcance do
+## Provocar — a deixa para o tank bot puxá-los.
+func _adds_soltos() -> bool:
+	for a: Add in get_tree().get_nodes_in_group("add"):
+		if not is_instance_valid(a) or not a.alive:
+			continue
+		if position.distance_to(a.position) > TAUNT_RADIUS:
+			continue
+		if not a.is_taunted():
+			return true
+	return false
 
 
 func _use_muralha() -> void:
@@ -152,6 +182,7 @@ func _draw() -> void:
 	if _is_boss_target():
 		draw_arc(Vector2.ZERO, radius + 7.0, 0.0, TAU, 22, Color(1.0, 0.3, 0.3, 0.9), 2.5)
 	_draw_sprite_shadow()
+	_draw_taunt_wave()
 	_draw_muralha_aura()
 	_draw_shield_overlay()
 	_draw_hp_bar(48.0, 6.0, -radius - 16.0, Color(0.9, 0.75, 0.3))
@@ -173,6 +204,16 @@ func _update_sprite() -> void:
 		body_sprite.rotation_degrees = 90.0
 		body_sprite.modulate = Color(0.5, 0.5, 0.55)
 		body_sprite.position = Vector2.ZERO
+
+
+## Onda que se expande até TAUNT_RADIUS ao usar Provocar. Mostra o alcance real
+## da habilidade — sem isso o jogador não tinha como saber que ela tem raio, nem
+## que foi usada.
+func _draw_taunt_wave() -> void:
+	if _taunt_fx_timer <= 0.0:
+		return
+	var t: float = 1.0 - (_taunt_fx_timer / TAUNT_FX_TIME)
+	draw_arc(Vector2.ZERO, TAUNT_RADIUS * t, 0.0, TAU, 40, Color(1.0, 0.4, 0.25, 1.0 - t), 3.0)
 
 
 ## Aura de aço enquanto Muralha está ativa — o único feedback visual da mitigação

@@ -20,6 +20,8 @@ var arena_rect := Rect2()
 
 var _attack_cd := 0.6
 var _facing := Vector2(0.0, 1.0)
+var _taunt_source: PartyMember = null
+var _taunt_timer := 0.0
 
 
 func _ready() -> void:
@@ -41,6 +43,8 @@ func _process(delta: float) -> void:
 	if not alive:
 		return
 	_tick_visuals(delta)
+	if _taunt_timer > 0.0:
+		_taunt_timer = maxf(0.0, _taunt_timer - delta)
 	var victim := _nearest_victim()
 	if victim != null:
 		var to_victim: Vector2 = victim.position - position
@@ -57,7 +61,25 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## Provocar: força este add a perseguir quem provocou por `duration` segundos,
+## ignorando a regra do mais próximo. É o que dá ao tank controle sobre adds —
+## sem isto o Provocar só afetava o boss.
+func taunt(source: PartyMember, duration: float) -> void:
+	if not alive or source == null or not is_instance_valid(source) or not source.alive:
+		return
+	_taunt_source = source
+	_taunt_timer = duration
+	queue_redraw()
+
+
+func is_taunted() -> bool:
+	return _taunt_timer > 0.0 and _taunt_source != null and is_instance_valid(_taunt_source) and _taunt_source.alive
+
+
+## Alvo do add: quem o provocou enquanto durar, senão o membro vivo mais próximo.
 func _nearest_victim() -> PartyMember:
+	if is_taunted():
+		return _taunt_source
 	var best: PartyMember = null
 	var best_d := INF
 	for m: PartyMember in get_tree().get_nodes_in_group("party"):
@@ -98,4 +120,9 @@ func _draw() -> void:
 	if not alive:
 		return
 	_draw_sprite_shadow()
+	# Anel vermelho enquanto provocado: sem marcador, o jogador não tem como saber
+	# que o Provocar pegou neste add.
+	if is_taunted():
+		var pulse: float = 0.6 + 0.3 * sin(anim_time * 10.0)
+		draw_arc(Vector2.ZERO, radius + 5.0, 0.0, TAU, 18, Color(1.0, 0.35, 0.25, pulse), 2.0)
 	_draw_hp_bar(24.0, 4.0, -radius - 10.0, Color(0.9, 0.5, 0.3))

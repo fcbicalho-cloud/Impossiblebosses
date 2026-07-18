@@ -31,9 +31,16 @@ Herança: `Actor` → `PartyMember` → papéis.
   `_apply_damage` (PartyMember desconta escudo) e `_die`.
 - `party_member.gd` — aliados: escudo, `revive`, clamp na arena, `_read_wasd()`,
   `_aoe_flee_vector()` (dodge dos bots), `_is_boss_target()`. Grupo `"party"`.
-- `mago.gd` (DPS: auto-attack + conjuração parado + Tab/clique), `guardiao.gd`
-  (tank: Ira, Provocar/taunt, Muralha, threat 3×), `clerigo.gd` (healer: Mana,
-  Cura/Rápida/Escudo/Rez; auto-mira o aliado mais ferido).
+- `mago.gd` (DPS: auto-attack + conjuração parado + Tab/clique; o BOT prioriza adds
+  sobre o boss), `guardiao.gd` (tank: Ira, Provocar, Muralha, threat 3×),
+  `clerigo.gd` (healer: Mana, Cura/Rápida/Escudo/Rez; alvo selecionável por
+  Tab/clique, com fallback automático no mais ferido).
+- **Provocar** age em DOIS sistemas diferentes: no boss mexe na tabela de threat
+  (`Boss.taunt`), nos adds força o alvo por tempo (`Add.taunt`, dentro de
+  `TAUNT_RADIUS`). Só o do boss existia — e como o threat 3× do tank já segurava o
+  boss sozinho, a habilidade parecia não fazer nada. Se for mexer no Provocar,
+  lembre que são dois caminhos, e que o efeito visual (onda + anel nos provocados)
+  é o que torna a habilidade perceptível.
 - **`is_bot`** em cada papel é a costura de fonte de input (humano OU IA na mesma
   classe) — é onde o multiplayer entra no futuro. Não duplicar classes por causa
   disso.
@@ -109,7 +116,8 @@ godot --headless --path . --import                    # importa assets
 godot --headless --path . -s tests/smoke_sprites.gd   # 4 personagens + mira do clerigo
 godot --headless --path . -s tests/smoke_arena.gd     # tilemap + spawn do encontro
 godot --headless --path . -s tests/smoke_encontro.gd  # dificuldade, fases, adds, enrage
-godot --path . -s tests/capture_screenshot.gd -- x.png [selecao|luta|adds]  # abre janela
+godot --headless --path . -s tests/smoke_taunt.gd     # Provocar no boss e nos adds
+godot --path . -s tests/capture_screenshot.gd -- x.png [selecao|luta|adds|taunt]  # abre janela
 ```
 
 Cuidados ao escrever testes assim:
