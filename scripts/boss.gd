@@ -22,9 +22,11 @@ const AOE_COOLDOWN := 2.6
 const MELEE_INTERVAL := 1.6
 const MELEE_DAMAGE := 26.0
 const TAUNT_THREAT_BONUS := 40.0
+const REZ_CHARGES_PER_ENCOUNTER := 1
 
 var arena_rect := Rect2()
 var phase := 1
+var rez_charges := REZ_CHARGES_PER_ENCOUNTER
 
 var _aoes: Array = []   # cada item: {"pos": Vector2, "timer": float}
 var _aoe_cd := 1.5
@@ -39,6 +41,7 @@ func _ready() -> void:
 	max_hp = 450.0
 	hp = max_hp
 	radius = 30.0
+	rez_charges = REZ_CHARGES_PER_ENCOUNTER
 
 
 func _process(delta: float) -> void:

@@ -4,11 +4,11 @@ Jogo de raid cooperativo visto de cima, inspirado no mapa *Impossible Bosses* de
 Warcraft 3. Veja a visão completa em [`docs/ESCOPO.md`](docs/ESCOPO.md).
 
 > 🚧 **Em reconstrução (do zero) sobre uma arquitetura mais limpa** (base `Actor`
-> unificada) + primeiro passo de **arte procedural** (personagens, arena, juice).
-> Estado atual: **Fase 3 — Tank + DPS**: escolha de papel (1 Guardião / 2 Mago; o
-> outro vira bot), **threat/aggro** (o boss segura no tank) e AoE telegrafado. O
-> **Clérigo (Healer)**, adds e fases do boss voltam nas Fases 4-5; algumas seções
-> abaixo descrevem o alvo final, não o que está jogável agora.
+> unificada) + arte **procedural** (personagens, arena, juice). Estado atual:
+> **Fase 4 — trindade completa**: escolha de papel (1 Guardião / 2 Clérigo /
+> 3 Mago; os outros dois viram bots), **threat/aggro**, **cura/mana/escudo/rez** e
+> AoE telegrafado. **Adds e fases do boss** voltam na Fase 5; algumas seções abaixo
+> descrevem o alvo final, não exatamente o que está jogável agora.
 
 ## Estado atual: protótipo M1 — trindade completa (tank/healer/dps) + bots
 

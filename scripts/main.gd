@@ -11,11 +11,12 @@ extends Node2D
 
 const ARENA_RECT := Rect2(60, 60, 840, 500)
 const BOSS_POS := Vector2(480, 200)
-const TANK_START := Vector2(480, 280)
-const MAGO_START := Vector2(480, 410)
+const TANK_START := Vector2(480, 290)
+const HEALER_START := Vector2(360, 430)
+const MAGO_START := Vector2(600, 430)
 
 var state := "select"  # "select" | "playing" | "won" | "lost"
-var human_role := ""   # "tank" | "dps"
+var human_role := ""   # "tank" | "healer" | "dps"
 
 var boss: Boss
 var party: Array = []
@@ -61,6 +62,15 @@ func _start_encounter() -> void:
 	add_child(guardiao)
 	party.append(guardiao)
 
+	var clerigo := Clerigo.new()
+	clerigo.arena_rect = ARENA_RECT
+	clerigo.position = HEALER_START
+	clerigo.boss = boss
+	clerigo.is_bot = human_role != "healer"
+	clerigo.died.connect(_on_member_died)
+	add_child(clerigo)
+	party.append(clerigo)
+
 	var mago := Mago.new()
 	mago.arena_rect = ARENA_RECT
 	mago.position = MAGO_START
@@ -71,7 +81,12 @@ func _start_encounter() -> void:
 	add_child(mago)
 	party.append(mago)
 
-	human_unit = guardiao if human_role == "tank" else mago
+	if human_role == "tank":
+		human_unit = guardiao
+	elif human_role == "healer":
+		human_unit = clerigo
+	else:
+		human_unit = mago
 
 	if _status_label:
 		_status_label.text = ""
@@ -123,6 +138,9 @@ func _handle_key(keycode: int) -> void:
 			human_role = "tank"
 			_start_encounter()
 		elif keycode == KEY_2:
+			human_role = "healer"
+			_start_encounter()
+		elif keycode == KEY_3:
 			human_role = "dps"
 			_start_encounter()
 		return
@@ -138,6 +156,10 @@ func _handle_key(keycode: int) -> void:
 		human_unit.activate_ability(1)
 	elif keycode == KEY_2 and human_unit.has_method("activate_ability"):
 		human_unit.activate_ability(2)
+	elif keycode == KEY_3 and human_unit.has_method("activate_ability"):
+		human_unit.activate_ability(3)
+	elif keycode == KEY_4 and human_unit.has_method("activate_ability"):
+		human_unit.activate_ability(4)
 
 
 func _try_click_target(world_pos: Vector2) -> void:
@@ -188,7 +210,7 @@ func _update_hint() -> void:
 	if _hint_label == null:
 		return
 	if state == "select":
-		_hint_label.text = "Escolha seu papel:   1 = Guardiao (Tank)    2 = Mago (DPS)\nO outro vira bot. R volta pra essa tela a qualquer momento."
+		_hint_label.text = "Escolha seu papel:   1 = Guardiao (Tank)    2 = Clerigo (Healer)    3 = Mago (DPS)\nOs outros dois viram bots. R volta pra essa tela a qualquer momento."
 		return
 	if state == "won":
 		_hint_label.text = "Voce venceu! Pressione R para escolher papel de novo."
@@ -205,7 +227,7 @@ func _update_hint() -> void:
 			members += _member_summary(m)
 	var boss_txt := ""
 	if is_instance_valid(boss):
-		boss_txt = "Boss: %d HP" % int(round(boss.hp))
+		boss_txt = "Boss: %d HP   Rez: %d" % [int(round(boss.hp)), boss.rez_charges]
 	_hint_label.text = "%s\n%s   |   %s" % [_control_hint(), members, boss_txt]
 
 
@@ -215,12 +237,17 @@ func _member_summary(m: PartyMember) -> String:
 	if m is Guardiao:
 		var g := m as Guardiao
 		return "Guardiao %s %s Ira %d" % [tag, hp_txt, int(round(g.ira))]
+	elif m is Clerigo:
+		var c := m as Clerigo
+		return "Clerigo %s %s Mana %d" % [tag, hp_txt, int(round(c.mana))]
 	return "Mago %s %s" % [tag, hp_txt]
 
 
 func _control_hint() -> String:
 	if human_role == "tank":
 		return "WASD mover | auto-attack no boss | 1 Provocar | 2 Muralha"
+	elif human_role == "healer":
+		return "WASD mover | cura mira o mais ferido | 1 Cura(parado) | 2 Rapida | 3 Escudo | 4 Rez"
 	return "WASD mover | PARADO conjura | Tab/clique alvo"
 
 
