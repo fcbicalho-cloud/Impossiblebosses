@@ -78,19 +78,57 @@ func _human_process(delta: float) -> void:
 		_clamp_to_arena()
 
 
+## IA do tank, por prioridade:
+##   1. Sair de AoE telegrafado. Antes o tank era o ÚNICO que não desviava — comia
+##      todo AoE, drenava o healer e morria, e tank morto costuma ser wipe.
+##   2. Ir buscar add que está batendo em outro aliado (era o buraco apontado: o
+##      tank ficava colado no boss enquanto adds moíam o healer).
+##   3. Voltar ao alcance do boss.
+## Provocar e Muralha são checados de forma INDEPENDENTE do movimento — antes
+## estavam num if/elif com o taunt, então a Muralha quase nunca saía.
 func _bot_process(delta: float) -> void:
-	if boss != null and is_instance_valid(boss):
-		var d: float = position.distance_to(boss.position)
-		if d > MELEE_RANGE * 0.8:
-			var dir: Vector2 = (boss.position - position).normalized()
-			position += dir * SPEED * delta
-			_clamp_to_arena()
-	# Provocar quando perdeu o boss OU quando há add solto por perto (o tank é
-	# quem deve levar as pancadas dos adds, não o healer).
+	var flee := _aoe_flee_vector()
+	if flee != Vector2.ZERO:
+		position += flee * SPEED * delta
+		_clamp_to_arena()
+	else:
+		var alvo := _add_para_buscar()
+		if alvo != null:
+			_mover_para(alvo.position, delta)
+		elif boss != null and is_instance_valid(boss):
+			if position.distance_to(boss.position) > MELEE_RANGE * 0.8:
+				_mover_para(boss.position, delta)
+
 	if _taunt_cd <= 0.0 and (not _is_boss_target() or _adds_soltos()):
 		_use_taunt()
-	elif hp_fraction() < 0.6 and _muralha_cd <= 0.0 and ira >= MURALHA_IRA_COST:
+	if _muralha_cd <= 0.0 and ira >= MURALHA_IRA_COST and hp_fraction() < 0.7:
 		_use_muralha()
+
+
+func _mover_para(destino: Vector2, delta: float) -> void:
+	var dir: Vector2 = destino - position
+	if dir.length() < 1.0:
+		return
+	position += dir.normalized() * SPEED * delta
+	_clamp_to_arena()
+
+
+## Add mais próximo que está perseguindo OUTRA pessoa. Enquanto ele estiver longe
+## demais para o Provocar alcançar, o tank vai até ele.
+func _add_para_buscar() -> Add:
+	var best: Add = null
+	var best_d := INF
+	for a: Add in get_tree().get_nodes_in_group("add"):
+		if not is_instance_valid(a) or not a.alive:
+			continue
+		var vitima := a.current_victim()
+		if vitima == self or vitima == null:
+			continue
+		var d: float = position.distance_to(a.position)
+		if d < best_d:
+			best_d = d
+			best = a
+	return best
 
 
 func _tick_cooldowns(delta: float) -> void:

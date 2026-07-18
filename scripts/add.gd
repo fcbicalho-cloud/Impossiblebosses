@@ -72,6 +72,12 @@ func taunt(source: PartyMember, duration: float) -> void:
 	queue_redraw()
 
 
+## Quem este add está perseguindo agora. Público para o tank bot saber quais adds
+## estão em cima de outra pessoa e ir buscá-los.
+func current_victim() -> PartyMember:
+	return _nearest_victim()
+
+
 func is_taunted() -> bool:
 	return _taunt_timer > 0.0 and _taunt_source != null and is_instance_valid(_taunt_source) and _taunt_source.alive
 

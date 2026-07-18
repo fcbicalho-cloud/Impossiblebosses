@@ -98,6 +98,10 @@ func _progress_cast(delta: float, moving: bool) -> void:
 	if moving or _cast_target == null or not is_instance_valid(_cast_target):
 		if _cast_progress > 0.15:
 			_interrupt_timer = 0.35
+		# Devolve a mana do cast interrompido. Sem isto, andar para sair de um AoE
+		# cobrava mana por uma cura que nunca saiu — nas dificuldades altas, com AoE
+		# a cada 2s, o healer ficava sem mana sem ter curado nada.
+		mana = minf(MANA_MAX, mana + (CURA_COST if _cast_kind == "cura" else REZ_COST))
 		_cast_kind = ""
 		_cast_progress = 0.0
 		return
@@ -235,8 +239,11 @@ func _start_rez(t: PartyMember) -> void:
 func _bot_decide() -> void:
 	if _cast_kind != "":
 		return
+	# Sob ameaça de AoE não vale começar cast: o bot vai ter de andar e interromper.
+	# Nessa janela ele só usa instantâneas (Rápida/Escudo).
+	var sob_ameaca: bool = _aoe_flee_vector() != Vector2.ZERO
 	var dead := _dead_ally()
-	if dead != null and boss != null and is_instance_valid(boss) and boss.rez_charges > 0 and mana >= REZ_COST:
+	if not sob_ameaca and dead != null and boss != null and is_instance_valid(boss) and boss.rez_charges > 0 and mana >= REZ_COST:
 		_start_rez(dead)
 		return
 
@@ -250,14 +257,14 @@ func _bot_decide() -> void:
 			_use_rapida(weakest)
 		elif _escudo_cd <= 0.0 and mana >= ESCUDO_COST:
 			_use_escudo(weakest)
-		elif mana >= CURA_COST:
+		elif mana >= CURA_COST and not sob_ameaca:
 			_start_cura(weakest)
 		return
 
 	if frac < 0.6:
 		if _rapida_cd <= 0.0 and mana >= RAPIDA_COST:
 			_use_rapida(weakest)
-		elif mana >= CURA_COST:
+		elif mana >= CURA_COST and not sob_ameaca:
 			_start_cura(weakest)
 		return
 
@@ -267,7 +274,7 @@ func _bot_decide() -> void:
 			_use_escudo(tanked)
 			return
 
-	if frac < 0.7 and mana >= CURA_COST:
+	if frac < 0.7 and mana >= CURA_COST and not sob_ameaca:
 		_start_cura(weakest)
 
 

@@ -41,6 +41,7 @@ var _world: Node2D
 var _status_label: Label
 var _hint_label: Label
 var _tiles: TileMapLayer
+var _ability_bar: AbilityBar
 var _phase_banner_timer := 0.0
 
 
@@ -158,6 +159,8 @@ func _start_encounter() -> void:
 
 	if _status_label:
 		_status_label.text = ""
+	if _ability_bar != null:
+		_ability_bar.unit = human_unit
 
 
 func _clear_encounter() -> void:
@@ -168,6 +171,8 @@ func _clear_encounter() -> void:
 			m.queue_free()
 	party.clear()
 	human_unit = null
+	if _ability_bar != null:
+		_ability_bar.unit = null  # some na tela de seleção e entre tentativas
 	if is_instance_valid(boss):
 		boss.queue_free()
 	if _world != null:
@@ -308,6 +313,11 @@ func _build_hud() -> void:
 	_hint_label.add_theme_font_size_override("font_size", 15)
 	_add_text_outline(_hint_label, 4)
 	layer.add_child(_hint_label)
+
+	# Barra de habilidades no topo direito (o status ocupa o topo esquerdo).
+	_ability_bar = AbilityBar.new()
+	_ability_bar.position = Vector2(ARENA_RECT.end.x - 4.0 * (AbilityBar.SLOT_W + AbilityBar.SLOT_GAP), 12.0)
+	layer.add_child(_ability_bar)
 
 
 ## Contorno preto no texto do HUD. Sem isso, letra branca sobre o piso claro do

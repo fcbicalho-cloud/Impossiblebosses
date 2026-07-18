@@ -57,10 +57,13 @@ Herança: `Actor` → `PartyMember` → papéis.
   threat, então vai atrás de quem está exposto e não do tank. Nasce nas bordas da
   arena (nascer perto do boss fazia todos grudarem no tank). Grupos `"targetable"` e
   `"add"`; ao morrer sai dos grupos e se libera.
-- `main.gd` — orquestrador: escolha de papel (1/2/3), spawn, HUD, roteamento de
-  teclas, wipe/vitória, container `_world` (grupo `"fx"`) para entidades/efeitos
-  transitórios. HUD lê `get_ability_info(index)`/`get_cast_status()` dos papéis —
-  mantenha esse contrato em vez de acessar campos privados.
+- `main.gd` — orquestrador: escolha de papel (1/2/3) e dificuldade (setas), spawn,
+  HUD, roteamento de teclas, wipe/vitória, container `_world` (grupo `"fx"`) para
+  entidades/efeitos transitórios.
+- `ability_bar.gd` — barra de habilidades do papel humano. É quem CONSOME o
+  contrato `get_ability_info(index)`/`get_cast_status()`; antes dela o contrato
+  existia sem ninguém do outro lado e cooldown/custo eram invisíveis em jogo. Ao
+  criar habilidade nova, exponha por `get_ability_info` em vez de mexer no HUD.
 - `damage_number.gd`, `aoe_burst.gd` — efeitos; vivem sob `_world`.
 
 ## Armadilhas de GDScript que já quebraram este projeto (checar SEMPRE)
@@ -120,7 +123,21 @@ godot --headless --path . -s tests/smoke_taunt.gd     # Provocar no boss e nos a
 godot --path . -s tests/capture_screenshot.gd -- x.png [selecao|luta|adds|taunt]  # abre janela
 ```
 
+Balanceamento: `tests/sim_luta.gd` roda o encontro inteiro só com bots e reporta
+vitórias/wipes/tempo — use para medir mudança de IA em vez de opinar.
+
+```bash
+godot --headless --path . -s tests/sim_luta.gd -- 1 8   # dificuldade 1, 8 lutas
+```
+
 Cuidados ao escrever testes assim:
+- **Comece o encontro num FRAME, nunca em `_initialize()`**: lá o nó ainda não está
+  na árvore, `get_tree()` é nulo e tudo falha em silêncio, em loop infinito.
+- **`get_process_delta_time()` já inclui `Engine.time_scale`.** Multiplicar de novo
+  faz o relógio do teste correr mais rápido que o jogo — isso já inflou tempos em
+  8× e cortou lutas cedo, produzindo um baseline totalmente falso.
+- Ponha um corte por número de FRAMES além do corte por tempo, senão um delta
+  zerado trava o teste para sempre.
 - **Não guarde referência a nó liberado.** `_start_encounter()` libera o boss antigo;
   ler um campo dele depois dispara erro por frame e o `quit()` nunca acontece — o teste
   roda para sempre gerando megabytes de log. Copie o valor antes de reiniciar.

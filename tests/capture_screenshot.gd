@@ -3,7 +3,8 @@ extends SceneTree
 ## teste). Abre uma janela por alguns segundos:
 ##   godot --path . -s tests/capture_screenshot.gd -- <saida.png> [cena]
 ## Cenas: "selecao" (tela de escolha), "luta" (encontro normal), "adds" (encontro
-## empurrado para a fase 3, com adds e enrage ativos). Padrão: "luta".
+## empurrado para a fase 3, com adds e enrage ativos), "taunt" (Provocar em ação),
+## "hud" (barra de habilidades com cooldowns correndo). Padrão: "luta".
 
 var _main: Node2D = null
 var _frame := 0
@@ -24,7 +25,12 @@ func _initialize() -> void:
 
 func _on_frame() -> void:
 	_frame += 1
-	if _frame == 5 and _cena != "selecao":
+	if _frame == 100 and _cena == "hud":
+		# Gasta Rápida e Escudo para os slots aparecerem em cooldown na captura.
+		var c := _main.human_unit as Clerigo
+		c.activate_ability(2)
+		c.activate_ability(3)
+	elif _frame == 5 and _cena != "selecao":
 		_main.difficulty_index = Difficulty.IMPOSSIVEL if _cena == "adds" else Difficulty.NORMAL
 		_main.human_role = "healer"
 		_main._start_encounter()
@@ -32,7 +38,7 @@ func _on_frame() -> void:
 		# Seleciona um aliado pra retícula de mira aparecer na captura.
 		var c := _main.human_unit as Clerigo
 		c.cycle_ally_target()
-		if _cena == "adds" or _cena == "taunt":
+		if _cena == "adds" or _cena == "taunt" or _cena == "hud":
 			# Empurra para a fase 3 (duas ondas de adds) e dispara o enrage.
 			_main.boss.hp = _main.boss.max_hp * 0.30
 			_main.boss.enrage_remaining = 0.0
