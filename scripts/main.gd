@@ -27,6 +27,8 @@ var _hint_label: Label
 func _ready() -> void:
 	_build_hud()
 	_world = Node2D.new()
+	_world.add_to_group("fx")  # Actor/Boss sobem números de dano e explosões aqui
+	_world.z_index = 10         # FX por cima dos personagens
 	add_child(_world)
 	_start_encounter()
 
@@ -152,5 +154,29 @@ func _update_hint() -> void:
 
 
 func _draw() -> void:
-	draw_rect(ARENA_RECT, Color(0.14, 0.15, 0.19), true)
-	draw_rect(ARENA_RECT, Color(0.48, 0.53, 0.68), false, 3.0)
+	# Piso base.
+	draw_rect(ARENA_RECT, Color(0.11, 0.12, 0.16), true)
+
+	# Grade sutil.
+	var grid_col := Color(1, 1, 1, 0.035)
+	var step := 48.0
+	var gx := ARENA_RECT.position.x + step
+	while gx < ARENA_RECT.end.x:
+		draw_line(Vector2(gx, ARENA_RECT.position.y), Vector2(gx, ARENA_RECT.end.y), grid_col, 1.0)
+		gx += step
+	var gy := ARENA_RECT.position.y + step
+	while gy < ARENA_RECT.end.y:
+		draw_line(Vector2(ARENA_RECT.position.x, gy), Vector2(ARENA_RECT.end.x, gy), grid_col, 1.0)
+		gy += step
+
+	# Vinheta nas bordas (escurece o perímetro).
+	var vign := Color(0, 0, 0, 0.10)
+	var b := 26.0
+	draw_rect(Rect2(ARENA_RECT.position, Vector2(ARENA_RECT.size.x, b)), vign, true)
+	draw_rect(Rect2(Vector2(ARENA_RECT.position.x, ARENA_RECT.end.y - b), Vector2(ARENA_RECT.size.x, b)), vign, true)
+	draw_rect(Rect2(ARENA_RECT.position, Vector2(b, ARENA_RECT.size.y)), vign, true)
+	draw_rect(Rect2(Vector2(ARENA_RECT.end.x - b, ARENA_RECT.position.y), Vector2(b, ARENA_RECT.size.y)), vign, true)
+
+	# Borda dupla.
+	draw_rect(ARENA_RECT, Color(0.35, 0.42, 0.60), false, 2.0)
+	draw_rect(ARENA_RECT.grow(-4.0), Color(0.5, 0.6, 0.85, 0.5), false, 1.0)

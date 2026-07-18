@@ -6,8 +6,8 @@ class_name Mago
 ## só progride PARADO (mover interrompe e zera). Alvo de inimigo via tab-target
 ## (Tab cicla / clique seleciona — roteado pelo Main) ou auto-aquisição do bot.
 ##
-## Fase 1: só o movimento é exercitado (ainda não há boss para atacar).
-## Fase 2: com o Boss em cena, o auto-attack e a conjuração passam a causar dano.
+## Visual procedural: mago com robe/chapéu/cajado, olha na direção do alvo,
+## leve balanço de idle, orbe do cajado brilha ao conjurar, flash ao tomar dano.
 
 const SPEED := 220.0
 const ATTACK_RANGE := 320.0
@@ -22,6 +22,7 @@ var _attack_cd := 0.0
 var _cast_progress := 0.0
 var _casting := false
 var _interrupt_timer := 0.0
+var _facing := Vector2(0.0, 1.0)
 
 
 func _ready() -> void:
@@ -35,6 +36,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not alive:
 		return
+	_tick_visuals(delta)
 	var moving := _bot_move(delta) if is_bot else _human_move(delta)
 	_handle_autoattack(delta)
 	_handle_cast(delta, moving)
@@ -42,6 +44,10 @@ func _process(delta: float) -> void:
 		_interrupt_timer -= delta
 	if target == null or not is_instance_valid(target):
 		_acquire_nearest_enemy()
+	if target != null and is_instance_valid(target):
+		var tv: Vector2 = target.position - position
+		if tv.length() > 1.0:
+			_facing = tv.normalized()
 	queue_redraw()
 
 
@@ -148,21 +154,78 @@ func _targetables() -> Array:
 
 
 func _draw() -> void:
+	# Retícula do alvo + linha de auto-attack.
 	if alive and target != null and is_instance_valid(target):
 		var to_target: Vector2 = target.position - position
-		draw_arc(to_target, 34.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.3, 0.9), 2.0)
+		draw_arc(to_target, 34.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.3, 0.85), 2.0)
 		if to_target.length() <= ATTACK_RANGE:
-			draw_line(Vector2.ZERO, to_target, Color(0.6, 0.9, 1.0, 0.28), 2.0)
+			draw_line(Vector2.ZERO, to_target, Color(0.6, 0.9, 1.0, 0.22), 2.0)
 
-	var body_color := Color(0.35, 0.7, 1.0) if alive else Color(0.4, 0.4, 0.45)
-	draw_circle(Vector2.ZERO, radius, body_color)
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, Color(0.9, 0.95, 1.0), 2.0)
-	if is_bot:
-		draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 16, Color(1.0, 1.0, 1.0, 0.35), 1.0)
-
+	_draw_character()
 	_draw_shield_overlay()
 	_draw_cast_bar()
-	_draw_hp_bar(40.0, 5.0, -radius - 12.0, Color(0.4, 1.0, 0.5))
+	_draw_hp_bar(40.0, 5.0, -radius - 14.0, Color(0.4, 1.0, 0.5))
+
+
+func _draw_character() -> void:
+	var dead := not alive
+	var bob := 0.0 if dead else sin(anim_time * 3.5) * 1.5
+
+	# Sombra (sem balanço).
+	draw_set_transform(Vector2(0.0, radius * 0.95), 0.0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, radius, Color(0, 0, 0, 0.28))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# Corpo (com balanço de idle).
+	draw_set_transform(Vector2(0.0, -bob), 0.0, Vector2.ONE)
+
+	var robe := _flash_mix(Color(0.32, 0.55, 0.95) if not dead else Color(0.42, 0.42, 0.47))
+	var robe_dark := _flash_mix(Color(0.22, 0.42, 0.82) if not dead else Color(0.34, 0.34, 0.40))
+	var skin := _flash_mix(Color(0.96, 0.86, 0.74) if not dead else Color(0.50, 0.50, 0.52))
+	var hat := _flash_mix(Color(0.24, 0.32, 0.72) if not dead else Color(0.30, 0.30, 0.36))
+	var w := radius
+
+	# Robe (trapézio) + sombreado esquerdo.
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-w, radius), Vector2(w, radius),
+		Vector2(w * 0.5, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
+	]), robe)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-w, radius), Vector2(0.0, radius),
+		Vector2(0.0, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
+	]), robe_dark)
+
+	# Cabeça.
+	var head := Vector2(0.0, -radius * 0.55)
+	draw_circle(head, radius * 0.42, skin)
+
+	# Chapéu (cone + aba).
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-radius * 0.55, head.y - radius * 0.18),
+		Vector2(radius * 0.55, head.y - radius * 0.18),
+		Vector2(0.0, head.y - radius * 1.35),
+	]), hat)
+	draw_line(head + Vector2(-radius * 0.62, -radius * 0.18), head + Vector2(radius * 0.62, -radius * 0.18), hat, 3.0)
+
+	# Olhos (olham na direção do facing).
+	var look := Vector2(_facing.x, 0.0) * (radius * 0.08)
+	draw_circle(head + Vector2(-radius * 0.14, -radius * 0.02) + look, radius * 0.05, Color(0.1, 0.1, 0.15))
+	draw_circle(head + Vector2(radius * 0.14, -radius * 0.02) + look, radius * 0.05, Color(0.1, 0.1, 0.15))
+
+	# Cajado + orbe na direção do facing.
+	var fdir := _facing
+	if fdir.length() < 0.1:
+		fdir = Vector2(0.0, 1.0)
+	fdir = fdir.normalized()
+	var hand := fdir * (radius * 0.5) + Vector2(0.0, radius * 0.1)
+	var tip := hand + fdir * (radius * 1.1)
+	draw_line(hand, tip, _flash_mix(Color(0.55, 0.40, 0.25)), 2.5)
+	var orb_pulse := 0.9 if _casting else (0.6 + 0.15 * sin(anim_time * 6.0))
+	if _casting:
+		draw_circle(tip, radius * 0.4, Color(0.5, 0.9, 1.0, 0.3))
+	draw_circle(tip, radius * 0.2, Color(0.6, 0.95, 1.0, orb_pulse))
+
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_cast_bar() -> void:
@@ -170,7 +233,7 @@ func _draw_cast_bar() -> void:
 		return
 	var w := 46.0
 	var h := 5.0
-	var off := Vector2(-w / 2.0, radius + 8.0)
+	var off := Vector2(-w / 2.0, radius + 10.0)
 	if _casting and _cast_progress > 0.0:
 		draw_rect(Rect2(off, Vector2(w, h)), Color(0, 0, 0, 0.6), true)
 		draw_rect(Rect2(off, Vector2(w * (_cast_progress / CAST_TIME), h)), Color(0.4, 0.85, 1.0), true)
