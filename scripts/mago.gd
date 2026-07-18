@@ -5,24 +5,23 @@ class_name Mago
 ## Modelo de dano: AUTO-ATTACK fraco (funciona andando) + CONJURAÇÃO forte que
 ## só progride PARADO (mover interrompe e zera). Alvo de inimigo via tab-target
 ## (Tab cicla / clique seleciona — roteado pelo Main) ou auto-aquisição do bot.
-## Dano ao boss gera threat (ver PartyMember.boss / Boss.add_threat).
+##
+## Fase 1: só o movimento é exercitado (ainda não há boss para atacar).
+## Fase 2: com o Boss em cena, o auto-attack e a conjuração passam a causar dano.
 
+const SPEED := 220.0
 const ATTACK_RANGE := 320.0
 const ATTACK_INTERVAL := 0.8
 const ATTACK_DAMAGE := 6.0
 const CAST_TIME := 1.1
 const CAST_DAMAGE := 28.0
-const SPEED := 220.0
 
-var target = null  # Boss ou Add (inimigos) — sem tipo fixo de propósito
-
-const RETARGET_INTERVAL := 0.5
+var target = null  # Boss/Add (inimigos) — sem tipo fixo de propósito
 
 var _attack_cd := 0.0
 var _cast_progress := 0.0
 var _casting := false
 var _interrupt_timer := 0.0
-var _retarget_cd := 0.0
 
 
 func _ready() -> void:
@@ -36,15 +35,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not alive:
 		return
-	var moving: bool
-	if is_bot:
-		_retarget_cd -= delta
-		if _retarget_cd <= 0.0:
-			_retarget_cd = RETARGET_INTERVAL
-			_bot_retarget()
-		moving = _bot_move(delta)
-	else:
-		moving = _human_move(delta)
+	var moving := _bot_move(delta) if is_bot else _human_move(delta)
 	_handle_autoattack(delta)
 	_handle_cast(delta, moving)
 	if _interrupt_timer > 0.0:
@@ -52,32 +43,6 @@ func _process(delta: float) -> void:
 	if target == null or not is_instance_valid(target):
 		_acquire_nearest_enemy()
 	queue_redraw()
-
-
-## Bot: prioriza matar Adds vivos sobre bater no Boss (troca de alvo real, não
-## só na morte do alvo atual). Reavaliado a cada RETARGET_INTERVAL, não todo
-## frame, pra evitar ficar trocando de alvo o tempo todo.
-func _bot_retarget() -> void:
-	if target != null and is_instance_valid(target) and target is Add:
-		return  # já está limpando um add, mantém até ele morrer
-	var nearest_add := _nearest_add()
-	if nearest_add != null:
-		target = nearest_add
-	elif target == null or not is_instance_valid(target):
-		_acquire_nearest_enemy()
-
-
-func _nearest_add() -> Node2D:
-	var best: Node2D = null
-	var best_d := INF
-	for n: Node2D in get_tree().get_nodes_in_group("add"):
-		if not is_instance_valid(n):
-			continue
-		var d: float = position.distance_to(n.position)
-		if d < best_d:
-			best_d = d
-			best = n
-	return best
 
 
 func _human_move(delta: float) -> bool:
@@ -90,8 +55,6 @@ func _human_move(delta: float) -> bool:
 
 
 func _bot_move(delta: float) -> bool:
-	if target == null or not is_instance_valid(target):
-		_acquire_nearest_enemy()
 	var flee := _aoe_flee_vector()
 	if flee != Vector2.ZERO:
 		position += flee * SPEED * delta
@@ -109,7 +72,7 @@ func _bot_move(delta: float) -> bool:
 
 func _handle_autoattack(delta: float) -> void:
 	_attack_cd = maxf(0.0, _attack_cd - delta)
-	if not _has_valid_target_in_range():
+	if not _has_target_in_range():
 		return
 	if _attack_cd == 0.0:
 		_attack_cd = ATTACK_INTERVAL
@@ -118,7 +81,7 @@ func _handle_autoattack(delta: float) -> void:
 
 
 func _handle_cast(delta: float, moving: bool) -> void:
-	if moving or not _has_valid_target_in_range():
+	if moving or not _has_target_in_range():
 		if _casting and _cast_progress > 0.15:
 			_interrupt_timer = 0.35
 		_casting = false
@@ -137,7 +100,7 @@ func _notify_threat(damage: float) -> void:
 		boss.add_threat(self, damage)
 
 
-func _has_valid_target_in_range() -> bool:
+func _has_target_in_range() -> bool:
 	if target == null or not is_instance_valid(target):
 		return false
 	if not target.has_method("take_damage"):
@@ -145,8 +108,6 @@ func _has_valid_target_in_range() -> bool:
 	return position.distance_to(target.position) <= ATTACK_RANGE
 
 
-## Usado pelo HUD (main.gd) — o Mago não tem habilidades ativadas por tecla,
-## então o painel mostra o estado da conjuração em vez de custo/cooldown.
 func get_cast_status() -> Dictionary:
 	return {
 		"casting": _casting,
@@ -170,7 +131,7 @@ func _acquire_nearest_enemy() -> void:
 	var best: Node2D = null
 	var best_d := INF
 	for t: Node2D in list:
-		var d := position.distance_to(t.position)
+		var d: float = position.distance_to(t.position)
 		if d < best_d:
 			best_d = d
 			best = t
@@ -199,6 +160,7 @@ func _draw() -> void:
 	if is_bot:
 		draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 16, Color(1.0, 1.0, 1.0, 0.35), 1.0)
 
+	_draw_shield_overlay()
 	_draw_cast_bar()
 	_draw_hp_bar(40.0, 5.0, -radius - 12.0, Color(0.4, 1.0, 0.5))
 
