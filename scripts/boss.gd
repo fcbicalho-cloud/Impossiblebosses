@@ -9,7 +9,9 @@ class_name Boss
 ##   - AoE telegrafado no chão, mirado num membro aleatório do grupo "party"
 ##     (mecânica "espalha" — qualquer um pode ser o alvo, inclusive o tank).
 ##
-## Visual: orbe sombrio com aura pulsante, chifres e olhos brilhantes.
+## Visual: sprite 16×16 (Kenney Tiny Dungeon) escalado 4× — maior que os 3× dos
+## jogadores, para o boss dominar a arena — com aura sombria pulsante e flash de
+## dano (shader do Actor). Telégrafos de AoE e barra de vida continuam via _draw.
 ## Fases, adds e projéteis voltam na Fase 5.
 
 signal phase_changed(new_phase: int)
@@ -42,9 +44,11 @@ func _ready() -> void:
 	hp = max_hp
 	radius = 30.0
 	rez_charges = REZ_CHARGES_PER_ENCOUNTER
+	_setup_body_sprite(preload("res://assets/characters/boss.png"), 4.0)
 
 
 func _process(delta: float) -> void:
+	_update_sprite()
 	if not alive:
 		return
 	_tick_visuals(delta)
@@ -173,38 +177,32 @@ func _draw() -> void:
 		draw_circle(local, AOE_RADIUS * frac, Color(1.0, 0.25, 0.2, 0.34))
 		draw_arc(local, AOE_RADIUS, 0.0, TAU, 32, Color(1.0, 0.3, 0.3, 0.9), 2.5)
 
-	_draw_body()
+	_draw_sprite_shadow()
+	_draw_aura()
 	_draw_hp_bar(110.0, 8.0, -radius - 20.0, Color(0.9, 0.3, 0.3))
 
 
-func _draw_body() -> void:
-	var dead := not alive
-	var pulse := 0.5 + 0.5 * sin(anim_time * 2.0)
+## Sincroniza o Sprite2D: respiração lenta (escala pulsante) e pose de morte.
+## Roda mesmo morto, por isso é chamado antes do early-return do _process.
+func _update_sprite() -> void:
+	if body_sprite == null:
+		return
+	if alive:
+		body_sprite.rotation_degrees = 0.0
+		body_sprite.modulate = Color.WHITE
+		var breathe: float = 4.0 + 0.12 * sin(anim_time * 2.0)
+		body_sprite.scale = Vector2(breathe, breathe)
+	else:
+		body_sprite.rotation_degrees = 90.0
+		body_sprite.modulate = Color(0.45, 0.3, 0.32)
+		body_sprite.scale = Vector2(4.0, 4.0)
 
-	if not dead:
-		draw_circle(Vector2.ZERO, radius * (1.55 + 0.25 * pulse), Color(0.9, 0.2, 0.3, 0.05 + 0.05 * pulse))
-		draw_circle(Vector2.ZERO, radius * (1.25 + 0.12 * pulse), Color(0.9, 0.25, 0.35, 0.10))
 
-	var horn := _flash_mix(Color(0.55, 0.18, 0.22) if not dead else Color(0.4, 0.3, 0.32))
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-radius * 0.72, -radius * 0.45),
-		Vector2(-radius * 0.32, -radius * 0.55),
-		Vector2(-radius * 0.52, -radius * 1.15),
-	]), horn)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(radius * 0.72, -radius * 0.45),
-		Vector2(radius * 0.32, -radius * 0.55),
-		Vector2(radius * 0.52, -radius * 1.15),
-	]), horn)
-
-	var body := _flash_mix(Color(0.82, 0.3, 0.35) if not dead else Color(0.45, 0.3, 0.32))
-	draw_circle(Vector2.ZERO, radius, body)
-	draw_circle(Vector2.ZERO, radius * 0.62, Color(0.5, 0.14, 0.2, 0.5))
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, _flash_mix(Color(1.0, 0.85, 0.85)), 3.0)
-
-	if not dead:
-		var eye := Color(1.0, 0.85, 0.3)
-		draw_circle(Vector2(-radius * 0.3, -radius * 0.08), radius * 0.13, eye)
-		draw_circle(Vector2(radius * 0.3, -radius * 0.08), radius * 0.13, eye)
-		draw_circle(Vector2(-radius * 0.3, -radius * 0.08), radius * 0.06, Color(1.0, 1.0, 0.8))
-		draw_circle(Vector2(radius * 0.3, -radius * 0.08), radius * 0.06, Color(1.0, 1.0, 0.8))
+## Aura sombria pulsante sob o boss (fica atrás do sprite, por ser desenhada no
+## _draw do próprio nó). Some quando ele morre.
+func _draw_aura() -> void:
+	if not alive:
+		return
+	var pulse: float = 0.5 + 0.5 * sin(anim_time * 2.0)
+	draw_circle(Vector2.ZERO, radius * (1.55 + 0.25 * pulse), Color(0.9, 0.2, 0.3, 0.05 + 0.05 * pulse))
+	draw_circle(Vector2.ZERO, radius * (1.25 + 0.12 * pulse), Color(0.9, 0.25, 0.35, 0.10))

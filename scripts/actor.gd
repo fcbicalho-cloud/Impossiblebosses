@@ -10,9 +10,12 @@ class_name Actor
 ## Pontos de extensão:
 ##   _apply_damage(amount) — PartyMember sobrescreve para descontar escudo.
 ##   _die()               — Add sobrescreve para sair dos grupos e liberar o nó.
-## Visual (subclasses chamam no _process e usam no _draw):
-##   _tick_visuals(delta) — avança anim_time e decai o flash.
-##   _flash_mix(color)    — mistura a cor com branco enquanto o flash está ativo.
+## Visual (subclasses chamam no _process e no _draw):
+##   _setup_body_sprite(tex, escala) — cria o Sprite2D do corpo (pixel art) com o
+##                                     shader de flash; chamar no _ready.
+##   _tick_visuals(delta)  — avança anim_time e decai o flash (que é repassado ao
+##                           shader do sprite).
+##   _draw_sprite_shadow() — sombra elíptica sob o sprite.
 
 signal died
 
@@ -108,13 +111,6 @@ func _draw_sprite_shadow() -> void:
 	draw_set_transform(Vector2(0.0, radius * 0.95), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, radius, Color(0, 0, 0, 0.28))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
-func _flash_mix(base: Color) -> Color:
-	if flash_timer <= 0.0:
-		return base
-	var t: float = clampf(flash_timer / FLASH_TIME, 0.0, 1.0)
-	return base.lerp(Color(1.0, 1.0, 1.0, base.a), t * 0.8)
 
 
 ## Sobe um número de dano flutuante na camada de FX (grupo "fx", criada pelo

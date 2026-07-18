@@ -7,7 +7,9 @@ class_name Guardiao
 ## "segurar" o boss. Recurso: Ira (ganha ao bater e ao apanhar; gasta em
 ## Muralha). Habilidades: Provocar (taunt, tecla 1) e Muralha (mitigação, 2).
 ##
-## Visual procedural: cavaleiro com elmo, escudo e espada, olha pro boss.
+## Visual: sprite 16×16 (Kenney Tiny Dungeon) escalado 3×, com flip na direção
+## do boss, balanço de idle e flash de dano (shader do Actor). Aro de aggro,
+## barras e brilho de Muralha continuam via _draw.
 
 const MAX_HP_VALUE := 160.0
 const MELEE_RANGE := 70.0
@@ -41,9 +43,11 @@ func _ready() -> void:
 	max_hp = MAX_HP_VALUE
 	hp = max_hp
 	radius = 15.0
+	_setup_body_sprite(preload("res://assets/characters/guardiao.png"), 3.0)
 
 
 func _process(delta: float) -> void:
+	_update_sprite()
 	if not alive:
 		return
 	_tick_visuals(delta)
@@ -147,61 +151,38 @@ func take_damage(amount: float) -> void:
 func _draw() -> void:
 	if _is_boss_target():
 		draw_arc(Vector2.ZERO, radius + 7.0, 0.0, TAU, 22, Color(1.0, 0.3, 0.3, 0.9), 2.5)
-	_draw_character()
+	_draw_sprite_shadow()
+	_draw_muralha_aura()
 	_draw_shield_overlay()
 	_draw_hp_bar(48.0, 6.0, -radius - 16.0, Color(0.9, 0.75, 0.3))
 	_draw_ira_bar()
 
 
-func _draw_character() -> void:
-	var dead := not alive
-	var bob := 0.0 if dead else sin(anim_time * 3.0) * 1.2
-	var side := 1.0 if _facing.x >= 0.0 else -1.0  # escudo do lado oposto ao facing
+## Sincroniza o Sprite2D: flip na direção do boss, balanço de idle e pose de
+## morte. Roda mesmo morto, por isso é chamado antes do early-return do _process.
+func _update_sprite() -> void:
+	if body_sprite == null:
+		return
+	if alive:
+		body_sprite.rotation_degrees = 0.0
+		body_sprite.modulate = Color.WHITE
+		body_sprite.position = Vector2(0.0, -sin(anim_time * 3.0) * 1.2)
+		if absf(_facing.x) > 0.1:
+			body_sprite.flip_h = _facing.x < 0.0
+	else:
+		body_sprite.rotation_degrees = 90.0
+		body_sprite.modulate = Color(0.5, 0.5, 0.55)
+		body_sprite.position = Vector2.ZERO
 
-	# Sombra.
-	draw_set_transform(Vector2(0.0, radius * 0.95), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, radius, Color(0, 0, 0, 0.28))
-	draw_set_transform(Vector2(0.0, -bob), 0.0, Vector2.ONE)
 
-	var steel := _flash_mix(Color(0.68, 0.71, 0.78) if not dead else Color(0.45, 0.45, 0.5))
-	var steel_dark := _flash_mix(Color(0.46, 0.49, 0.57) if not dead else Color(0.36, 0.36, 0.42))
-	var gold := _flash_mix(Color(0.85, 0.7, 0.3) if not dead else Color(0.5, 0.48, 0.42))
-	var w := radius
-
-	# Corpo (armadura).
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w * 0.9, radius), Vector2(w * 0.9, radius),
-		Vector2(w * 0.7, -radius * 0.2), Vector2(-w * 0.7, -radius * 0.2),
-	]), steel)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w * 0.9, radius), Vector2(0.0, radius),
-		Vector2(0.0, -radius * 0.2), Vector2(-w * 0.7, -radius * 0.2),
-	]), steel_dark)
-
-	# Elmo.
-	var head := Vector2(0.0, -radius * 0.55)
-	draw_circle(head, radius * 0.44, steel)
-	draw_rect(Rect2(head + Vector2(-radius * 0.34, -radius * 0.06), Vector2(radius * 0.68, radius * 0.12)), Color(0.08, 0.08, 0.12))
-	# Penacho.
-	draw_line(head + Vector2(0.0, -radius * 0.42), head + Vector2(0.0, -radius * 0.95), gold, 3.0)
-
-	# Espada (lado do facing).
-	var sx := side * w * 0.95
-	draw_line(Vector2(sx, radius * 0.4), Vector2(sx, -radius * 1.25), steel_dark, 3.0)
-	draw_line(Vector2(sx - radius * 0.25, radius * 0.35), Vector2(sx + radius * 0.25, radius * 0.35), gold, 3.0)
-
-	# Escudo (lado oposto).
-	var shx := -side * w * 0.85
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(shx - radius * 0.4, -radius * 0.35),
-		Vector2(shx + radius * 0.4, -radius * 0.35),
-		Vector2(shx + radius * 0.4, radius * 0.35),
-		Vector2(shx, radius * 0.65),
-		Vector2(shx - radius * 0.4, radius * 0.35),
-	]), steel)
-	draw_circle(Vector2(shx, radius * 0.1), radius * 0.16, gold)
-
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+## Aura de aço enquanto Muralha está ativa — o único feedback visual da mitigação
+## (o sprite é estático), então precisa ser legível à distância.
+func _draw_muralha_aura() -> void:
+	if not alive or _muralha_timer <= 0.0:
+		return
+	var pulse: float = 0.6 + 0.25 * sin(anim_time * 9.0)
+	draw_circle(Vector2.ZERO, radius * 1.4, Color(0.7, 0.8, 1.0, 0.15))
+	draw_arc(Vector2.ZERO, radius * 1.4, 0.0, TAU, 26, Color(0.8, 0.9, 1.0, pulse), 3.0)
 
 
 func _draw_ira_bar() -> void:

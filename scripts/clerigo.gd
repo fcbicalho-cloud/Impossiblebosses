@@ -7,8 +7,9 @@ class_name Clerigo
 ## Habilidades (teclas 1-4): Cura (cast parado, forte), Cura Rápida (instant),
 ## Escudo (absorção), Ressurreição (channel; consome 1 carga de rez do boss).
 ##
-## Visual procedural: clérigo de robe clara com auréola e cajado com gema;
-## brilho sagrado ao conjurar.
+## Visual: sprite 16×16 (Kenney Tiny Dungeon) escalado 3×, com balanço de idle e
+## flash de dano (shader do Actor). Brilho sagrado ao conjurar, feixe até o alvo
+## da cura, barras e cast bar continuam via _draw.
 
 const MAX_HP_VALUE := 90.0
 const SPEED := 210.0
@@ -48,9 +49,11 @@ func _ready() -> void:
 	max_hp = MAX_HP_VALUE
 	hp = max_hp
 	radius = 14.0
+	_setup_body_sprite(preload("res://assets/characters/clerigo.png"), 3.0)
 
 
 func _process(delta: float) -> void:
+	_update_sprite()
 	if not alive:
 		return
 	_tick_visuals(delta)
@@ -239,57 +242,47 @@ func _current_boss_target() -> PartyMember:
 
 
 func _draw() -> void:
-	_draw_character()
+	_draw_sprite_shadow()
+	_draw_holy_glow()
+	_draw_heal_beam()
 	_draw_shield_overlay()
 	_draw_cast_bar()
 	_draw_hp_bar(40.0, 5.0, -radius - 16.0, Color(0.4, 1.0, 0.5))
 	_draw_mana_bar()
 
 
-func _draw_character() -> void:
-	var dead := not alive
-	var bob := 0.0 if dead else sin(anim_time * 3.2) * 1.4
+## Sincroniza o Sprite2D: balanço de idle e pose de morte. O clérigo não vira
+## para lados (a cura é auto-mirada), então não há flip. Roda mesmo morto.
+func _update_sprite() -> void:
+	if body_sprite == null:
+		return
+	if alive:
+		body_sprite.rotation_degrees = 0.0
+		body_sprite.modulate = Color.WHITE
+		body_sprite.position = Vector2(0.0, -sin(anim_time * 3.2) * 1.4)
+	else:
+		body_sprite.rotation_degrees = 90.0
+		body_sprite.modulate = Color(0.5, 0.5, 0.55)
+		body_sprite.position = Vector2.ZERO
 
-	# Sombra.
-	draw_set_transform(Vector2(0.0, radius * 0.95), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, radius, Color(0, 0, 0, 0.28))
-	draw_set_transform(Vector2(0.0, -bob), 0.0, Vector2.ONE)
 
-	# Brilho sagrado ao conjurar.
-	if _cast_kind != "" and not dead:
-		draw_circle(Vector2.ZERO, radius * 1.5, Color(1.0, 0.95, 0.6, 0.12))
+## Aura dourada sob o clérigo enquanto conjura (fica atrás do sprite).
+func _draw_holy_glow() -> void:
+	if not alive or _cast_kind == "":
+		return
+	var pulse: float = 0.10 + 0.06 * sin(anim_time * 7.0)
+	draw_circle(Vector2.ZERO, radius * 1.6, Color(1.0, 0.95, 0.6, pulse))
 
-	var robe := _flash_mix(Color(0.92, 0.90, 0.82) if not dead else Color(0.5, 0.5, 0.52))
-	var robe_dark := _flash_mix(Color(0.75, 0.72, 0.62) if not dead else Color(0.4, 0.4, 0.44))
-	var skin := _flash_mix(Color(0.96, 0.86, 0.74) if not dead else Color(0.5, 0.5, 0.52))
-	var gold := _flash_mix(Color(0.85, 0.70, 0.30) if not dead else Color(0.5, 0.48, 0.42))
-	var w := radius
 
-	# Robe.
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w, radius), Vector2(w, radius),
-		Vector2(w * 0.5, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
-	]), robe)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w, radius), Vector2(0.0, radius),
-		Vector2(0.0, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
-	]), robe_dark)
-	# Estola dourada.
-	draw_line(Vector2(-radius * 0.2, -radius * 0.15), Vector2(-radius * 0.2, radius), gold, 2.0)
-	draw_line(Vector2(radius * 0.2, -radius * 0.15), Vector2(radius * 0.2, radius), gold, 2.0)
-
-	# Cabeça + auréola.
-	var head := Vector2(0.0, -radius * 0.55)
-	draw_circle(head, radius * 0.42, skin)
-	draw_arc(head + Vector2(0.0, -radius * 0.5), radius * 0.42, 0.0, TAU, 20, gold, 2.5)
-
-	# Cajado com gema (mão direita).
-	var top := Vector2(radius * 0.85, -radius * 1.2)
-	draw_line(Vector2(radius * 0.85, radius * 0.5), top, gold, 2.5)
-	var gem_pulse := 0.9 if _cast_kind != "" else (0.6 + 0.15 * sin(anim_time * 5.0))
-	draw_circle(top, radius * 0.16, Color(0.5, 0.9, 1.0, gem_pulse))
-
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+## Feixe até o alvo da cura/rez — deixa explícito QUEM está sendo curado, que era
+## invisível antes (a mira é automática, o jogador não escolhe).
+func _draw_heal_beam() -> void:
+	if not alive or _cast_kind == "" or _cast_target == null or not is_instance_valid(_cast_target):
+		return
+	var to_target: Vector2 = _cast_target.position - position
+	var color := Color(1.0, 0.85, 0.3, 0.5) if _cast_kind == "rez" else Color(0.5, 1.0, 0.7, 0.45)
+	draw_line(Vector2.ZERO, to_target, color, 2.0)
+	draw_arc(to_target, 20.0, 0.0, TAU, 20, color, 2.0)
 
 
 func _draw_cast_bar() -> void:
