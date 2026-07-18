@@ -77,6 +77,21 @@ habilidade, essa linha mostra o estado da conjuração (`Conjurando: 60%`,
 
 Não há dependências externas nem passos de build.
 
+## Trabalhando localmente com Claude Code
+
+Para a fase gráfica (e qualquer iteração rápida), o fluxo recomendado é o **Claude
+Code local** na mesma máquina onde o Godot roda:
+
+1. Instale o Claude Code (app desktop em <https://claude.com/claude-code>, ou CLI)
+   e faça login.
+2. Abra com ele a **pasta deste repositório** (a mesma clonada pelo GitHub
+   Desktop). Ele lê o [`CLAUDE.md`](CLAUDE.md) automaticamente e ganha todo o
+   contexto do projeto (arquitetura, convenções, armadilhas de GDScript).
+3. **Sempre `Pull` antes de começar e `Push` ao terminar** — este repo também é
+   editado por sessões remotas do Claude; é isso que evita conflito entre elas.
+4. Assets de arte: ver regras e estrutura em [`assets/README.md`](assets/README.md)
+   (16×16, CC0, créditos obrigatórios em `assets/CREDITS.md`).
+
 ## Controles
 
 | Ação                          | Comando                                    |
