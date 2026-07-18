@@ -6,8 +6,9 @@ class_name Mago
 ## só progride PARADO (mover interrompe e zera). Alvo de inimigo via tab-target
 ## (Tab cicla / clique seleciona — roteado pelo Main) ou auto-aquisição do bot.
 ##
-## Visual procedural: mago com robe/chapéu/cajado, olha na direção do alvo,
-## leve balanço de idle, orbe do cajado brilha ao conjurar, flash ao tomar dano.
+## Visual: sprite 16×16 (Kenney Tiny Dungeon) escalado 3×, com flip na direção
+## do alvo, balanço de idle, flash de dano (shader do Actor) e orbe de conjuração.
+## Barras/retícula/sombra continuam via _draw por cima/por baixo do sprite.
 
 const SPEED := 220.0
 const ATTACK_RANGE := 320.0
@@ -31,9 +32,11 @@ func _ready() -> void:
 	max_hp = 100.0
 	hp = max_hp
 	radius = 14.0
+	_setup_body_sprite(preload("res://assets/characters/mago.png"), 3.0)
 
 
 func _process(delta: float) -> void:
+	_update_sprite()
 	if not alive:
 		return
 	_tick_visuals(delta)
@@ -161,71 +164,43 @@ func _draw() -> void:
 		if to_target.length() <= ATTACK_RANGE:
 			draw_line(Vector2.ZERO, to_target, Color(0.6, 0.9, 1.0, 0.22), 2.0)
 
-	_draw_character()
+	_draw_sprite_shadow()
+	_draw_cast_glow()
 	_draw_shield_overlay()
 	_draw_cast_bar()
 	_draw_hp_bar(40.0, 5.0, -radius - 14.0, Color(0.4, 1.0, 0.5))
 
 
-func _draw_character() -> void:
-	var dead := not alive
-	var bob := 0.0 if dead else sin(anim_time * 3.5) * 1.5
+## Sincroniza o Sprite2D com o estado do jogo: flip na direção do alvo, balanço
+## de idle e pose de morte (deitado + acinzentado). Roda mesmo morto, por isso é
+## chamado antes do early-return do _process.
+func _update_sprite() -> void:
+	if body_sprite == null:
+		return
+	if alive:
+		body_sprite.rotation_degrees = 0.0
+		body_sprite.modulate = Color.WHITE
+		body_sprite.position = Vector2(0.0, -sin(anim_time * 3.5) * 1.5)
+		if absf(_facing.x) > 0.1:
+			body_sprite.flip_h = _facing.x < 0.0
+	else:
+		body_sprite.rotation_degrees = 90.0
+		body_sprite.modulate = Color(0.5, 0.5, 0.55)
+		body_sprite.position = Vector2.ZERO
 
-	# Sombra (sem balanço).
-	draw_set_transform(Vector2(0.0, radius * 0.95), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, radius, Color(0, 0, 0, 0.28))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	# Corpo (com balanço de idle).
-	draw_set_transform(Vector2(0.0, -bob), 0.0, Vector2.ONE)
-
-	var robe := _flash_mix(Color(0.32, 0.55, 0.95) if not dead else Color(0.42, 0.42, 0.47))
-	var robe_dark := _flash_mix(Color(0.22, 0.42, 0.82) if not dead else Color(0.34, 0.34, 0.40))
-	var skin := _flash_mix(Color(0.96, 0.86, 0.74) if not dead else Color(0.50, 0.50, 0.52))
-	var hat := _flash_mix(Color(0.24, 0.32, 0.72) if not dead else Color(0.30, 0.30, 0.36))
-	var w := radius
-
-	# Robe (trapézio) + sombreado esquerdo.
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w, radius), Vector2(w, radius),
-		Vector2(w * 0.5, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
-	]), robe)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-w, radius), Vector2(0.0, radius),
-		Vector2(0.0, -radius * 0.15), Vector2(-w * 0.5, -radius * 0.15),
-	]), robe_dark)
-
-	# Cabeça.
-	var head := Vector2(0.0, -radius * 0.55)
-	draw_circle(head, radius * 0.42, skin)
-
-	# Chapéu (cone + aba).
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-radius * 0.55, head.y - radius * 0.18),
-		Vector2(radius * 0.55, head.y - radius * 0.18),
-		Vector2(0.0, head.y - radius * 1.35),
-	]), hat)
-	draw_line(head + Vector2(-radius * 0.62, -radius * 0.18), head + Vector2(radius * 0.62, -radius * 0.18), hat, 3.0)
-
-	# Olhos (olham na direção do facing).
-	var look := Vector2(_facing.x, 0.0) * (radius * 0.08)
-	draw_circle(head + Vector2(-radius * 0.14, -radius * 0.02) + look, radius * 0.05, Color(0.1, 0.1, 0.15))
-	draw_circle(head + Vector2(radius * 0.14, -radius * 0.02) + look, radius * 0.05, Color(0.1, 0.1, 0.15))
-
-	# Cajado + orbe na direção do facing.
+## Orbe de conjuração pulsando à frente do mago (o cajado do sprite é estático;
+## o feedback de "estou conjurando" vem deste brilho + cast bar).
+func _draw_cast_glow() -> void:
+	if not alive or not _casting:
+		return
 	var fdir := _facing
 	if fdir.length() < 0.1:
 		fdir = Vector2(0.0, 1.0)
-	fdir = fdir.normalized()
-	var hand := fdir * (radius * 0.5) + Vector2(0.0, radius * 0.1)
-	var tip := hand + fdir * (radius * 1.1)
-	draw_line(hand, tip, _flash_mix(Color(0.55, 0.40, 0.25)), 2.5)
-	var orb_pulse := 0.9 if _casting else (0.6 + 0.15 * sin(anim_time * 6.0))
-	if _casting:
-		draw_circle(tip, radius * 0.4, Color(0.5, 0.9, 1.0, 0.3))
-	draw_circle(tip, radius * 0.2, Color(0.6, 0.95, 1.0, orb_pulse))
-
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var tip: Vector2 = fdir.normalized() * (radius + 6.0)
+	var pulse: float = 0.7 + 0.2 * sin(anim_time * 10.0)
+	draw_circle(tip, radius * 0.4, Color(0.5, 0.9, 1.0, 0.3))
+	draw_circle(tip, radius * 0.2, Color(0.6, 0.95, 1.0, pulse))
 
 
 func _draw_cast_bar() -> void:
