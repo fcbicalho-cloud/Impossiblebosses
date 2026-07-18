@@ -27,6 +27,20 @@ const AOE_RADIUS := 90.0
 const MELEE_INTERVAL := 1.6
 const TAUNT_THREAT_BONUS := 40.0
 
+## O boss PERSEGUE o topo da tabela de threat e só bate dentro de MELEE_RANGE.
+## Antes ele era estático e acertava a qualquer distância, o que tornava
+## posicionamento e threat decorativos: dava para atravessar a arena sem largar o
+## boss. Agora puxar aggro traz o boss até você — inclusive para longe do grupo.
+##
+## MOVE_SPEED é deliberadamente menor que a dos jogadores (200-220): dá margem
+## para reposicionar e para o tank arrastar o boss, sem permitir kite infinito,
+## já que parar para conjurar (Mago) ou curar (Clérigo) deixa o boss alcançar.
+const MOVE_SPEED := 155.0
+const MELEE_RANGE := 74.0
+## Histerese: só começa a andar acima de MELEE_RANGE, e para um pouco antes dele,
+## para não tremer no limite do alcance.
+const MELEE_STOP := MELEE_RANGE * 0.8
+
 ## Limiares de vida que disparam as fases 2 e 3.
 const PHASE_THRESHOLDS: Array[float] = [0.66, 0.33]
 ## Multiplicadores por fase (índice = fase - 1): AoE mais frequente e melee mais
@@ -49,6 +63,7 @@ var _aoes: Array = []   # cada item: {"pos": Vector2, "timer": float}
 var _aoe_cd := 1.5
 var _melee_cd := 2.0
 var _enrage_elapsed := 0.0
+var _facing_x := 0.0
 var _world: Node2D = null  # container onde os adds nascem (setado pelo Main)
 
 var _threat_members: Array = []   # PartyMember (guardados sem tipo estrito)
@@ -73,9 +88,26 @@ func _process(delta: float) -> void:
 	_tick_visuals(delta)
 	_update_phase()
 	_update_enrage(delta)
+	_update_movement(delta)
 	_update_melee(delta)
 	_update_aoes(delta)
 	queue_redraw()
+
+
+## Persegue o alvo do topo do threat. Sem alvo, fica onde está.
+func _update_movement(delta: float) -> void:
+	var t: PartyMember = current_target()
+	if t == null or not is_instance_valid(t):
+		return
+	var to_target: Vector2 = t.position - position
+	var d: float = to_target.length()
+	if d <= MELEE_STOP or d < 1.0:
+		return
+	position += to_target.normalized() * MOVE_SPEED * delta
+	_facing_x = to_target.x
+	if arena_rect.size != Vector2.ZERO:
+		position.x = clampf(position.x, arena_rect.position.x + radius, arena_rect.end.x - radius)
+		position.y = clampf(position.y, arena_rect.position.y + radius, arena_rect.end.y - radius)
 
 
 # --- Fases e enrage --------------------------------------------------------
@@ -218,6 +250,10 @@ func _update_melee(delta: float) -> void:
 	var t: PartyMember = current_target()
 	if t == null:
 		return
+	# Alcance de verdade: fora dele o boss precisa CAMINHAR até o alvo. O cooldown
+	# não reinicia aqui, então ele bate assim que chega.
+	if position.distance_to(t.position) > MELEE_RANGE:
+		return
 	_melee_cd = MELEE_INTERVAL
 	t.take_damage(difficulty.melee_damage * damage_multiplier())
 
@@ -304,6 +340,8 @@ func _update_sprite() -> void:
 		body_sprite.modulate = Color.WHITE
 		var breathe: float = 4.0 + 0.12 * sin(anim_time * 2.0)
 		body_sprite.scale = Vector2(breathe, breathe)
+		if absf(_facing_x) > 0.1:
+			body_sprite.flip_h = _facing_x < 0.0
 	else:
 		body_sprite.rotation_degrees = 90.0
 		body_sprite.modulate = Color(0.45, 0.3, 0.32)

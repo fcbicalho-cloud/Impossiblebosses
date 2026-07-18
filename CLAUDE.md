@@ -49,6 +49,13 @@ Herança: `Actor` → `PartyMember` → papéis.
   desviam), `rez_charges`. Grupo `"targetable"` (inimigos alvo de Tab/clique).
   **Fases** em 66%/33% de vida (cada uma acelera o AoE, sobe o melee e solta uma onda
   de adds) e **enrage** por tempo, com o dano acumulado em `damage_multiplier()`.
+  **Move-se** perseguindo o topo do threat e só bate dentro de `MELEE_RANGE` — antes
+  era estático e acertava a qualquer distância, o que tornava threat e posicionamento
+  decorativos. `MOVE_SPEED` (155) é menor que a dos jogadores (200-220) de propósito.
+  ⚠️ **Risco em aberto:** por ser mais lento, um humano consegue *kitar* o boss
+  indefinidamente e anular o corpo-a-corpo. Se isso virar problema na prática, as
+  saídas são subir `MOVE_SPEED`, dar uma investida ao boss, ou escalar o dano quando
+  ele fica sem alcançar o alvo por muito tempo. Nada disso está implementado.
 - `difficulty.gd` — preset Normal/Heroico/Impossivel. TODO número que muda entre
   dificuldades mora aqui; boss e adds leem daqui em vez de ter constantes próprias.
   Classe tipada (não Dictionary) por causa da armadilha 2 abaixo. O Main seta
@@ -120,6 +127,7 @@ godot --headless --path . -s tests/smoke_sprites.gd   # 4 personagens + mira do 
 godot --headless --path . -s tests/smoke_arena.gd     # tilemap + spawn do encontro
 godot --headless --path . -s tests/smoke_encontro.gd  # dificuldade, fases, adds, enrage
 godot --headless --path . -s tests/smoke_taunt.gd     # Provocar no boss e nos adds
+godot --headless --path . -s tests/smoke_boss_movimento.gd  # perseguicao e alcance
 godot --path . -s tests/capture_screenshot.gd -- x.png [selecao|luta|adds|taunt]  # abre janela
 ```
 
@@ -138,6 +146,9 @@ Cuidados ao escrever testes assim:
   8× e cortou lutas cedo, produzindo um baseline totalmente falso.
 - Ponha um corte por número de FRAMES além do corte por tempo, senão um delta
   zerado trava o teste para sempre.
+- **Zere `shield` antes de medir dano.** O Clérigo bot escuda os aliados, e a
+  absorção faz o HP não cair: um teste que só olha HP acusa "não bateu" quando
+  bateu — e, pior, passa quando um golpe indevido foi absorvido.
 - **Não guarde referência a nó liberado.** `_start_encounter()` libera o boss antigo;
   ler um campo dele depois dispara erro por frame e o `quit()` nunca acontece — o teste
   roda para sempre gerando megabytes de log. Copie o valor antes de reiniciar.
