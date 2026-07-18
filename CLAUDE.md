@@ -59,17 +59,48 @@ Herança: `Actor` → `PartyMember` → papéis.
 
 ## Fase gráfica (estado atual e próximos passos)
 
-Arte hoje é **procedural** (`_draw`). O alvo é **pixel art 16×16 estilo Zelda
-top-down** com packs CC0 — regras e estrutura em `assets/README.md`; todo pack
-registrado em `assets/CREDITS.md`. O filtro **Nearest já está ligado** no
-`project.godot`.
+Arte é **pixel art 16×16 do Kenney Tiny Dungeon (CC0)**. Pack original intacto em
+`assets/packs/kenney_tiny_dungeon/`; o que o jogo usa é copiado com nome por
+função para `assets/characters/` e `assets/tiles/`. Regras em
+`assets/README.md`, créditos em `assets/CREDITS.md`. Filtro **Nearest** ligado.
 
-Ordem recomendada (um passo por vez, testando com F5 entre eles):
-1. Assets no repo (`assets/`) e import verificado no editor.
-2. Trocar `_draw` por `AnimatedSprite2D`/`SpriteFrames` em UM personagem (Mago) e
-   validar o pipeline; depois os demais (as barras/telégrafos via `_draw` podem
-   continuar por cima dos sprites).
-3. `TileMapLayer` para o chão/paredes da arena (substituindo o retângulo do main).
-4. Por último: resolução base retrô + stretch `canvas_items` — **cuidado**: as
-   coordenadas do jogo são hardcoded para 960×640 (`ARENA_RECT`, spawns no
-   `main.gd`); mudar resolução exige reposicionar tudo junto.
+Feito:
+1. ✅ Assets no repo, import verificado (`--headless --import`).
+2. ✅ Os 4 personagens usam `Sprite2D` via `Actor._setup_body_sprite(tex, escala)`
+   — jogadores em 3×, boss em 4×. Barras, retículas, telégrafos e auras seguem
+   em `_draw`, por cima ou por baixo do sprite.
+3. ✅ Chão/paredes com `TileMapLayer` construído em código no `main.gd`
+   (`_build_arena_tiles`), em `z_index -1`.
+
+Detalhes que importam:
+- **Não há frames de animação**: o Tiny Dungeon tem 1 frame por personagem. O
+  movimento é sugerido por bob de idle, flip horizontal e pose de morte. Animação
+  de caminhada de verdade exige outro pack (ex.: Zelda-like do ArMM1998, 4 direções)
+  — aí sim troca-se `Sprite2D` por `AnimatedSprite2D`.
+- **Flash de dano usa shader** (`Actor.FLASH_SHADER_CODE`), não `modulate`:
+  modulate multiplica, então só escurece; clarear até branco precisa de shader.
+- O `ARENA_RECT` **não** é múltiplo do tile (48px) de propósito: ele é a fronteira
+  de jogo e continua intocado; o tilemap se encaixa por fora dela.
+- Texto do HUD leva contorno preto (`_add_text_outline`) — o piso claro do tileset
+  torna letra branca pura ilegível.
+
+Próximo passo (não feito): resolução base retrô + stretch `canvas_items` —
+**cuidado**: as coordenadas do jogo são hardcoded para 960×640 (`ARENA_RECT`,
+spawns no `main.gd`); mudar resolução exige reposicionar tudo junto.
+
+## Verificação real (há Godot na máquina do usuário)
+
+`C:\Users\filip\Downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe`
+(o .exe está dentro de uma pasta de mesmo nome). Use o binário `_console` para ver
+a saída no terminal. Comandos:
+
+```bash
+godot --headless --path . --import                    # importa assets
+godot --headless --path . -s tests/smoke_sprites.gd   # 4 personagens + mira do clerigo
+godot --headless --path . -s tests/smoke_arena.gd     # tilemap + spawn do encontro
+godot --path . -s tests/capture_screenshot.gd -- x.png  # screenshot (abre janela)
+```
+
+Os smokes imprimem `SMOKE OK`/`SMOKE FALHOU` e usam exit code. A captura de tela é
+a forma de conferir o visual sem depender do usuário — ela já pegou bugs reais
+(manchas no piso, HUD ilegível) que os testes headless não pegariam.

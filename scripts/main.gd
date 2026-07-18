@@ -10,6 +10,20 @@ extends Node2D
 ## 3º slot voltam na Fase 4.
 
 const ARENA_RECT := Rect2(60, 60, 840, 500)
+
+## Chão/paredes: atlas 16×16 do Tiny Dungeon escalado 3× (célula de 48px no
+## mundo). O ARENA_RECT NÃO é múltiplo de 48 de propósito — ele é a fronteira de
+## jogo (clamp/spawns) e continua intocado; o tilemap só se encaixa por fora
+## dela. Ver o aviso sobre coordenadas hardcoded no CLAUDE.md.
+const TILE_SCALE := 3
+const TILE_PX := 16
+const CELL_PX := TILE_PX * TILE_SCALE
+## Coordenadas no atlas (coluna, linha): piso de terra e parede de tijolo.
+## O piso tem só liso + salpicado: o tile (3,4) tem uma faixa escura que, espalhada,
+## vira mancha marrom aleatória no chão em vez de textura.
+const FLOOR_TILES: Array[Vector2i] = [Vector2i(0, 4), Vector2i(1, 4)]
+const WALL_TILES: Array[Vector2i] = [Vector2i(9, 4), Vector2i(10, 4), Vector2i(11, 4)]
+const FLOOR_VARIATION_CHANCE := 0.18
 const BOSS_POS := Vector2(480, 200)
 const TANK_START := Vector2(480, 290)
 const HEALER_START := Vector2(360, 430)
@@ -25,15 +39,63 @@ var human_unit = null  # Guardiao | Mago — sem tipo fixo de propósito
 var _world: Node2D
 var _status_label: Label
 var _hint_label: Label
+var _tiles: TileMapLayer
 
 
 func _ready() -> void:
+	_build_arena_tiles()
 	_build_hud()
 	_world = Node2D.new()
 	_world.add_to_group("fx")
 	_world.z_index = 10
 	add_child(_world)
 	_show_select()
+
+
+## Monta o chão/paredes uma única vez (o cenário não muda entre tentativas).
+## z_index -1 põe o tilemap ABAIXO do _draw do próprio Main, que ainda desenha a
+## vinheta e a borda da arena por cima; personagens (z 0) e FX (z 10) ficam acima.
+func _build_arena_tiles() -> void:
+	var atlas := TileSetAtlasSource.new()
+	atlas.texture = preload("res://assets/tiles/dungeon.png")
+	atlas.texture_region_size = Vector2i(TILE_PX, TILE_PX)
+	for coord: Vector2i in FLOOR_TILES + WALL_TILES:
+		atlas.create_tile(coord)
+
+	var tile_set := TileSet.new()
+	tile_set.tile_size = Vector2i(TILE_PX, TILE_PX)
+	tile_set.add_source(atlas, 0)
+
+	_tiles = TileMapLayer.new()
+	_tiles.tile_set = tile_set
+	_tiles.scale = Vector2(TILE_SCALE, TILE_SCALE)
+	_tiles.z_index = -1
+	_paint_cells()
+	add_child(_tiles)
+
+
+## Cobre a janela inteira: célula que encosta na arena vira chão; célula
+## totalmente fora vira parede. Assim a parede nunca invade a área jogável — no
+## máximo sobra uma faixa fina de chão entre ela e a borda, que lê como beirada.
+func _paint_cells() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260718  # cenário estável entre execuções
+	# Tamanho vem do ProjectSettings, não do viewport: em headless o viewport não
+	# reporta 960×640 e o cenário sairia com 4 células (pego pelo smoke_arena).
+	var win_w: int = ProjectSettings.get_setting("display/window/size/viewport_width", 960)
+	var win_h: int = ProjectSettings.get_setting("display/window/size/viewport_height", 640)
+	var cols := int(ceil(float(win_w) / CELL_PX))
+	var rows := int(ceil(float(win_h) / CELL_PX))
+	for cy in range(rows):
+		for cx in range(cols):
+			var cell_rect := Rect2(cx * CELL_PX, cy * CELL_PX, CELL_PX, CELL_PX)
+			var pool := FLOOR_TILES if cell_rect.intersects(ARENA_RECT) else WALL_TILES
+			var coord: Vector2i = pool[0]
+			if pool == WALL_TILES:
+				coord = pool[rng.randi() % pool.size()]
+			elif rng.randf() < FLOOR_VARIATION_CHANCE:
+				coord = pool[1 + rng.randi() % (pool.size() - 1)]
+			_tiles.set_cell(Vector2i(cx, cy), 0, coord)
 
 
 func _show_select() -> void:
@@ -204,12 +266,21 @@ func _build_hud() -> void:
 	_status_label = Label.new()
 	_status_label.position = Vector2(ARENA_RECT.position.x, 14)
 	_status_label.add_theme_font_size_override("font_size", 30)
+	_add_text_outline(_status_label, 6)
 	layer.add_child(_status_label)
 
 	_hint_label = Label.new()
 	_hint_label.position = Vector2(ARENA_RECT.position.x, ARENA_RECT.end.y + 8)
 	_hint_label.add_theme_font_size_override("font_size", 15)
+	_add_text_outline(_hint_label, 4)
 	layer.add_child(_hint_label)
+
+
+## Contorno preto no texto do HUD. Sem isso, letra branca sobre o piso claro do
+## tileset fica ilegível (o fundo antigo era escuro e não precisava).
+func _add_text_outline(label: Label, size: int) -> void:
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	label.add_theme_constant_override("outline_size", size)
 
 
 func _update_hint() -> void:
@@ -257,20 +328,10 @@ func _control_hint() -> String:
 	return "WASD mover | PARADO conjura | Tab/clique alvo"
 
 
+## Só o que fica POR CIMA do tilemap: vinheta e a borda que marca a fronteira
+## exata de jogo (o chão em si vem do TileMapLayer, em z -1). O preenchimento
+## opaco e a grade antigos saíram — o tile já dá textura ao piso.
 func _draw() -> void:
-	draw_rect(ARENA_RECT, Color(0.11, 0.12, 0.16), true)
-
-	var grid_col := Color(1, 1, 1, 0.035)
-	var step := 48.0
-	var gx := ARENA_RECT.position.x + step
-	while gx < ARENA_RECT.end.x:
-		draw_line(Vector2(gx, ARENA_RECT.position.y), Vector2(gx, ARENA_RECT.end.y), grid_col, 1.0)
-		gx += step
-	var gy := ARENA_RECT.position.y + step
-	while gy < ARENA_RECT.end.y:
-		draw_line(Vector2(ARENA_RECT.position.x, gy), Vector2(ARENA_RECT.end.x, gy), grid_col, 1.0)
-		gy += step
-
 	var vign := Color(0, 0, 0, 0.10)
 	var b := 26.0
 	draw_rect(Rect2(ARENA_RECT.position, Vector2(ARENA_RECT.size.x, b)), vign, true)
