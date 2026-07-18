@@ -8,6 +8,7 @@ extends SceneTree
 var _members: Array[PartyMember] = []
 var _boss: Boss = null
 var _frame := 0
+var _targeting_ok := false
 
 
 func _initialize() -> void:
@@ -43,8 +44,45 @@ func _on_frame() -> void:
 	elif _frame == 30:
 		for m: PartyMember in _members:
 			m.revive(0.5)
+	elif _frame == 35:
+		_check_clerigo_targeting()
 	elif _frame >= 40:
 		_report()
+
+
+## Seleção manual do Clerigo: Tab cicla, clique acerta/erra, e o fallback para o
+## automático quando o alvo escolhido morre (caso que gastaria mana à toa).
+func _check_clerigo_targeting() -> void:
+	var c: Clerigo = _members[2] as Clerigo
+	c.is_bot = false
+
+	c.heal_target = null
+	c.cycle_ally_target()
+	var cycled_to_someone: bool = c.heal_target != null
+	var first := c.heal_target
+	for _i in range(3):
+		c.cycle_ally_target()
+	var cycle_wraps: bool = c.heal_target == first
+
+	var hit: bool = c.select_ally_at(_members[0].position)
+	var picked_mago: bool = c.heal_target == _members[0]
+	var missed: bool = not c.select_ally_at(Vector2(-500.0, -500.0))
+	var kept_after_miss: bool = c.heal_target == _members[0]
+
+	# Alvo selecionado morre -> cura cai no automático, rez mira o próprio morto.
+	_members[0].take_damage(9999.0)
+	var living_falls_back: bool = c._living_target() != _members[0]
+	var rez_targets_dead: bool = c._dead_target() == _members[0]
+	_members[0].revive(0.5)
+
+	c.heal_target = null
+	c.is_bot = true
+	_targeting_ok = (cycled_to_someone and cycle_wraps and hit and picked_mago
+		and missed and kept_after_miss and living_falls_back and rez_targets_dead)
+	if not _targeting_ok:
+		print("MIRA FALHOU: ciclo=%s wrap=%s clique=%s mago=%s vazio=%s manteve=%s fallback=%s rez=%s" % [
+			cycled_to_someone, cycle_wraps, hit, picked_mago,
+			missed, kept_after_miss, living_falls_back, rez_targets_dead])
 
 
 func _report() -> void:
@@ -58,5 +96,7 @@ func _report() -> void:
 	var boss_good: bool = _boss.alive and _boss.body_sprite != null and _boss.hp < _boss.max_hp
 	ok = ok and boss_good
 	lines.append("Boss hp=%.0f/%.0f sprite=%s" % [_boss.hp, _boss.max_hp, _boss.body_sprite != null])
+	ok = ok and _targeting_ok
+	lines.append("mira_clerigo=%s" % _targeting_ok)
 	print("SMOKE %s: %s" % ["OK" if ok else "FALHOU", " | ".join(lines)])
 	quit(0 if ok else 1)

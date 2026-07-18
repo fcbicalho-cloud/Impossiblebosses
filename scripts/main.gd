@@ -126,6 +126,9 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if human_unit is Mago:
 			_try_click_target(get_global_mouse_position())
+		elif human_unit is Clerigo:
+			var c := human_unit as Clerigo
+			c.select_ally_at(get_global_mouse_position())
 
 
 func _handle_key(keycode: int) -> void:
@@ -151,6 +154,9 @@ func _handle_key(keycode: int) -> void:
 	if keycode == KEY_TAB:
 		if human_unit is Mago:
 			human_unit.cycle_target()
+		elif human_unit is Clerigo:
+			var c := human_unit as Clerigo
+			c.cycle_ally_target()
 		get_viewport().set_input_as_handled()
 	elif keycode == KEY_1 and human_unit.has_method("activate_ability"):
 		human_unit.activate_ability(1)
@@ -247,7 +253,7 @@ func _control_hint() -> String:
 	if human_role == "tank":
 		return "WASD mover | auto-attack no boss | 1 Provocar | 2 Muralha"
 	elif human_role == "healer":
-		return "WASD mover | cura mira o mais ferido | 1 Cura(parado) | 2 Rapida | 3 Escudo | 4 Rez"
+		return "WASD mover | Tab/clique escolhe aliado (sem escolha: o mais ferido) | 1 Cura(parado) | 2 Rapida | 3 Escudo | 4 Rez"
 	return "WASD mover | PARADO conjura | Tab/clique alvo"
 
 

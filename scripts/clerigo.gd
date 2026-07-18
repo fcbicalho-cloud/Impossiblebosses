@@ -2,8 +2,9 @@ extends PartyMember
 class_name Clerigo
 ## Clerigo — Healer. Jogável (humano) ou bot.
 ##
-## A cura sempre mira automaticamente o aliado com menos vida (sem seleção
-## manual) — a decisão real é QUAL habilidade e QUANDO. Recurso: Mana.
+## Mira: o humano SELECIONA o alvo (Tab cicla o grupo / clique escolhe — roteado
+## pelo Main); sem seleção, cai no automático (aliado com menos vida). O bot
+## ignora a seleção e usa sempre a própria lógica. Recurso: Mana.
 ## Habilidades (teclas 1-4): Cura (cast parado, forte), Cura Rápida (instant),
 ## Escudo (absorção), Ressurreição (channel; consome 1 carga de rez do boss).
 ##
@@ -34,6 +35,9 @@ const REZ_COST := 40.0
 const REZ_HP_FRACTION := 0.5
 
 var mana := MANA_MAX
+## Alvo escolhido pelo humano. null = mira automática (mais ferido). Só o humano
+## usa; o bot decide sozinho em _bot_decide.
+var heal_target: PartyMember = null
 
 var _rapida_cd := 0.0
 var _escudo_cd := 0.0
@@ -115,13 +119,66 @@ func activate_ability(index: int) -> void:
 	if not alive:
 		return
 	if index == 1:
-		_start_cura(_lowest_hp_ally())
+		_start_cura(_living_target())
 	elif index == 2:
-		_use_rapida(_lowest_hp_ally())
+		_use_rapida(_living_target())
 	elif index == 3:
-		_use_escudo(_lowest_hp_ally())
+		_use_escudo(_living_target())
 	elif index == 4:
-		_start_rez(_dead_ally())
+		_start_rez(_dead_target())
+
+
+## Alvo das habilidades de vivo (cura/escudo): o selecionado, se estiver válido e
+## VIVO; senão o mais ferido. O fallback evita queimar mana à toa quando o alvo
+## escolhido morreu no meio da luta.
+func _living_target() -> PartyMember:
+	if heal_target != null and is_instance_valid(heal_target) and heal_target.alive:
+		return heal_target
+	return _lowest_hp_ally()
+
+
+## Alvo da rez: o selecionado, se estiver MORTO; senão qualquer morto.
+func _dead_target() -> PartyMember:
+	if heal_target != null and is_instance_valid(heal_target) and not heal_target.alive:
+		return heal_target
+	return _dead_ally()
+
+
+## Cicla a seleção entre os membros do grupo (inclui mortos, para poder escolher
+## quem receber a rez). Ordem estável por instance_id, como no Tab do Mago.
+func cycle_ally_target() -> void:
+	var list := _party_sorted()
+	if list.is_empty():
+		heal_target = null
+		return
+	var idx := list.find(heal_target)
+	heal_target = list[(idx + 1) % list.size()]
+
+
+## Seleciona por clique o aliado sob a posição dada; ignora cliques no vazio
+## (mantém a seleção atual, como num MMO). Devolve true se algo foi selecionado.
+func select_ally_at(world_pos: Vector2) -> bool:
+	var best: PartyMember = null
+	var best_d := INF
+	for m: PartyMember in _party_sorted():
+		var d: float = world_pos.distance_to(m.position)
+		if d <= m.pick_radius() and d < best_d:
+			best_d = d
+			best = m
+	if best == null:
+		return false
+	heal_target = best
+	return true
+
+
+func _party_sorted() -> Array[PartyMember]:
+	var out: Array[PartyMember] = []
+	for n: PartyMember in get_tree().get_nodes_in_group("party"):
+		if is_instance_valid(n):
+			out.append(n)
+	out.sort_custom(func(a: PartyMember, b: PartyMember) -> bool:
+		return a.get_instance_id() < b.get_instance_id())
+	return out
 
 
 func get_ability_info(index: int) -> Dictionary:
@@ -244,7 +301,7 @@ func _current_boss_target() -> PartyMember:
 func _draw() -> void:
 	_draw_sprite_shadow()
 	_draw_holy_glow()
-	_draw_heal_beam()
+	_draw_target_reticle()
 	_draw_shield_overlay()
 	_draw_cast_bar()
 	_draw_hp_bar(40.0, 5.0, -radius - 16.0, Color(0.4, 1.0, 0.5))
@@ -274,15 +331,17 @@ func _draw_holy_glow() -> void:
 	draw_circle(Vector2.ZERO, radius * 1.6, Color(1.0, 0.95, 0.6, pulse))
 
 
-## Feixe até o alvo da cura/rez — deixa explícito QUEM está sendo curado, que era
-## invisível antes (a mira é automática, o jogador não escolhe).
-func _draw_heal_beam() -> void:
-	if not alive or _cast_kind == "" or _cast_target == null or not is_instance_valid(_cast_target):
+## Retícula no aliado selecionado (só o humano seleciona). Verde = vivo, âmbar =
+## morto (candidato a rez). Sem seleção não desenha nada: a mira automática não
+## precisa de marcador.
+func _draw_target_reticle() -> void:
+	if not alive or is_bot:
 		return
-	var to_target: Vector2 = _cast_target.position - position
-	var color := Color(1.0, 0.85, 0.3, 0.5) if _cast_kind == "rez" else Color(0.5, 1.0, 0.7, 0.45)
-	draw_line(Vector2.ZERO, to_target, color, 2.0)
-	draw_arc(to_target, 20.0, 0.0, TAU, 20, color, 2.0)
+	if heal_target == null or not is_instance_valid(heal_target):
+		return
+	var local: Vector2 = heal_target.position - position
+	var color := Color(0.4, 1.0, 0.6, 0.9) if heal_target.alive else Color(1.0, 0.8, 0.3, 0.9)
+	draw_arc(local, heal_target.radius + 8.0, 0.0, TAU, 24, color, 2.0)
 
 
 func _draw_cast_bar() -> void:
